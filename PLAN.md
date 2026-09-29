@@ -12,8 +12,7 @@ Bring your own family profile, your own Gmail, your own cron.
   confirmed against its source before it ships.
 - **Enrich**: calendar-conflict flags (optional, per-profile feature flag),
   weather-based indoor picks, drive-time annotations from your home area.
-- **Render**: HTML email from a theme-driven template (inline styles only,
-  light + dark mode, mobile-first).
+- **Render**: HTML email from a theme-driven template (inline styles only, dark design, mobile-first).
 - **Send**: via Gmail with a verified-send gate — a send only counts with a
   concrete Gmail message ID, Sent-folder confirmation, the correct address
   in the To header, and a matching run-log entry. Never record "sent"
@@ -67,7 +66,7 @@ Key surfaces:
 ## Testing
 
 `python3 -m pytest pipeline/tests/` — the suite covers the send gate,
-calendar tiers, config validation, template rendering (light/dark mode),
+calendar tiers, config validation, template rendering (dark design),
 the public/private footer split, and the calendar feature flag.
 
 ## Roadmap

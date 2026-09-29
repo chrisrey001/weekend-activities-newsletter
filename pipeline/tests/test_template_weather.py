@@ -18,8 +18,6 @@ KIWI_THEME = {
     "home_label": "Englewood",
     "kid_field": "kid_friendly",
     "kid_label": "Family pick",
-    "dashboard_url": "https://example.com/dashboard",
-    "dashboard_label": "Command Center",
 }
 
 
@@ -169,56 +167,74 @@ class TestPublicFooter(unittest.TestCase):
 
     def test_private_keeps_metrics_link(self):
         doc = self._render(False)
-        self.assertIn("Command Center", doc)
-        self.assertIn("https://example.com/dashboard", doc)
+        self.assertIn("K3 Command Center", doc)
         self.assertNotIn("Reply STOP", doc)
-
-    def test_private_without_dashboard_url_has_no_link(self):
-        theme = dict(KIWI_THEME)
-        theme["dashboard_url"] = None
-        theme["public_edition"] = False
-        doc = t.render_newsletter([event()], WK, "<p>Header</p>", theme=theme)
-        self.assertNotIn("Command Center", doc)
-        self.assertNotIn("<a href", doc.split("curated for")[-1])
 
     def test_public_drops_metrics_link_adds_stop(self):
         doc = self._render(True)
-        self.assertNotIn("Command Center", doc)
-        self.assertNotIn("https://example.com/dashboard", doc)
+        self.assertNotIn("K3 Command Center", doc)
         self.assertIn("Reply STOP to unsubscribe", doc)
 
     def test_public_footer_has_no_names(self):
         doc = self._render(True)
-        for name in ("Jordan", "Casey", "Riley"):
+        for name in ("Chris", "Kristen", "Ava"):
             self.assertNotIn(name, doc)
 
 
-class TestRedesignTokens(unittest.TestCase):
-    """Claude's tokens.json brand must show up in the render."""
+class TestDarkBrandTokens(unittest.TestCase):
+    """The email copies the HTML design's DARK version exactly."""
 
     def setUp(self):
         self.doc = t.render_newsletter(
             [event(tags=["family-friendly", "cant-miss"], kid_friendly=True)],
-            WK, "<p>Header</p>", theme=KIWI_THEME)
+            WK, "<p>Header</p>", theme=KIWI_THEME,
+            weather_note="Sunny weekend, highs in the mid-60s")
 
-    def test_brand_tokens_present(self):
-        for token in ("#FFF7EA", "#2A2530", "#C8472B", "#FFE7A3",
-                      "#EADFCF", "#6B6270"):
+    def test_dark_tokens_present(self):
+        for token in ("#1E1A22", "#29232E", "#F3EDE4", "#B9AFB8",
+                      "#3C3442", "#FF9B7A", "#7FD3AE",
+                      "#1D3A2E", "#D2A8F0", "#362640", "#45281F",
+                      "#1D3441"):
             self.assertIn(token, self.doc, token)
 
+    def test_palette_matches_design_dark_tokens(self):
+        # PALETTE must be the HTML design's :root[data-theme="dark"]
+        # values exactly (the CTA coral is defined for future buttons;
+        # the sample-edition layout has no button, so it need not render).
+        self.assertEqual(t.PALETTE, {
+            "bg": "#1E1A22", "surface": "#29232E", "ink": "#F3EDE4",
+            "muted": "#B9AFB8", "line": "#3C3442", "cta": "#FF8A65",
+            "cta_ink": "#1E1A22", "accent_text": "#FF9B7A",
+            "sun": "#FFC94A", "sun_soft": "#4A3C1C",
+            "sky_soft": "#1D3441", "leaf": "#7FD3AE",
+            "leaf_soft": "#1D3A2E", "berry": "#D2A8F0",
+            "berry_soft": "#362640", "tomato_soft": "#45281F",
+        })
+
     def test_pill_tags(self):
-        self.assertIn("kw-tag-fam", self.doc)
-        self.assertIn("kw-tag-miss", self.doc)
         self.assertIn(">Family</span>", self.doc)
         self.assertIn("Can&#x27;t miss</span>", self.doc)
+        # family pill: mint on dark green; date-night: lilac on dark
+        # purple; can't-miss: coral on dark brown
+        self.assertIn("#1D3A2E", self.doc)
+        self.assertIn("#362640", self.doc)
+        self.assertIn("#45281F", self.doc)
 
-    def test_dark_mode_support(self):
-        self.assertIn('name="color-scheme" content="light dark"', self.doc)
-        self.assertIn("@media (prefers-color-scheme: dark)", self.doc)
-        self.assertIn("#1E1A22", self.doc)
+    def test_dark_only_no_light_variant(self):
+        # Note: #2A2530 is excluded here because it appears inside the
+        # design's own dog-mascot SVG (copied exactly), not as a light
+        # theme color.
+        for light in ("#FFF7EA", "#C8472B", "#FFE7A3",
+                      "#6B6270", "#EADFCF", "#1F7A55", "#D8F0E4",
+                      "#7C3E9E", "#EFE3F8", "#FBDCD2", "#B8401F"):
+            self.assertNotIn(light, self.doc, light)
+        self.assertNotIn("@media (prefers-color-scheme", self.doc)
+        self.assertIn('name="color-scheme" content="dark"', self.doc)
 
     def test_rounded_cards(self):
-        self.assertIn("border-radius: 14px", self.doc)
+        self.assertIn("border-radius: 16px", self.doc)   # event cards
+        self.assertIn("border-radius: 22px", self.doc)   # edition card
+        self.assertIn("border-radius: 999px", self.doc)  # pills
 
     def test_old_palette_gone(self):
         for old in ("#1a1a2e", "#e67e22", "#f9f9f9", "#fdf6ec", "#4CAF50"):
@@ -227,3 +243,9 @@ class TestRedesignTokens(unittest.TestCase):
     def test_email_fonts(self):
         self.assertIn("Fredoka", self.doc)
         self.assertIn("Nunito", self.doc)
+
+    def test_header_not_nested_paragraphs(self):
+        # header_html is inserted verbatim in the lede block, not wrapped
+        # in a second <p> (nested paragraphs were a shipped bug).
+        self.assertEqual(self.doc.count("<p>Header</p>"), 1)
+        self.assertNotIn("<p><p>", self.doc)

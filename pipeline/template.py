@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Kiwi's Weekend Guide newsletter template (parameterized).
 
-Promoted from runs/2026-09-17/render.py into the durable pipeline. Same
-approved email design (inline styles only, mobile-friendly, 700px max-width);
-all run-specific values are now parameters -- there are no date-suffixed
-anything in this module.
+Promoted from runs/2026-09-17/render.py into the durable pipeline. The
+design is copied exactly from the HTML design's DARK version
+(workspace/user/files/kiwis-corner-preview.html, :root[data-theme="dark"]):
+dark-purple page (#1E1A22), dark-purple cards (#29232E), coral CTA
+(#FF8A65), Fredoka headings + Nunito body, rounded cards, category pills.
+Email-safe rule: hex values only, inline styles. There is no light
+variant -- the dark version is the design (per Chris, 2026-09-29).
 
 Public API:
     render_newsletter(events, weekend, header_html, picks=None,
@@ -47,8 +50,6 @@ DEFAULT_THEME = {
     "home_label": "home",
     "kid_field": "kid_friendly",
     "kid_label": None,
-    "dashboard_url": None,          # private-edition footer link (optional)
-    "dashboard_label": "Command Center",
 }
 
 _THEME = dict(DEFAULT_THEME)
@@ -72,63 +73,56 @@ def _resolve_theme(theme):
     merged.update(theme)
     return merged
 
-# Kiwi's Weekend Guide brand tokens (from design/tokens.json, light palette).
-# Email-safe rule: hex values only, inline styles; dark mode handled via a
-# prefers-color-scheme <style> block with classes + !important (Apple Mail).
+
+# Dark-version design tokens, copied exactly from the HTML design
+# (:root[data-theme="dark"]). No light variant.
 PALETTE = {
-    "bg": "#FFF7EA", "surface": "#FFFFFF", "ink": "#2A2530",
-    "muted": "#6B6270", "line": "#EADFCF", "cta": "#C8472B",
-    "cta_ink": "#FFFFFF", "sun_soft": "#FFE7A3",
-    "accent_text": "#B8401F",
-}
-PALETTE_DARK = {
-    "bg": "#1E1A22", "surface": "#29232E", "ink": "#F3EDE4",
-    "muted": "#B9AFB8", "line": "#3C3442", "cta": "#FF8A65",
-    "cta_ink": "#1E1A22", "sun_soft": "#4A3C1C",
-    "accent_text": "#FF9B7A",
+    "bg": "#1E1A22",        # page background (dark purple)
+    "surface": "#29232E",   # cards (dark purple)
+    "ink": "#F3EDE4",       # primary text
+    "muted": "#B9AFB8",     # secondary text
+    "line": "#3C3442",      # borders
+    "cta": "#FF8A65",       # CTA coral
+    "cta_ink": "#1E1A22",   # text on CTA
+    "accent_text": "#FF9B7A",  # links, eyebrows
+    "sun": "#FFC94A",
+    "sun_soft": "#4A3C1C",
+    "sky_soft": "#1D3441",  # weather strip
+    "leaf": "#7FD3AE",
+    "leaf_soft": "#1D3A2E",
+    "berry": "#D2A8F0",
+    "berry_soft": "#362640",
+    "tomato_soft": "#45281F",
 }
 FONT_HEADING = "'Fredoka', 'Trebuchet MS', Arial, sans-serif"
 FONT_BODY = "'Nunito', 'Segoe UI', Arial, sans-serif"
 
-# Pill tags (from tokens.json event_tags): label + light (text, bg) pair.
+# Category pills, from the design's .tag.fam / .tag.date / .tag.must.
 TAG_PILL = {
-    "family-friendly": ("Family", "#1F7A55", "#D8F0E4"),
-    "date-night": ("Date night", "#7C3E9E", "#EFE3F8"),
-    "cant-miss": ("Can't miss", "#B8401F", "#FBDCD2"),
-}
-TAG_PILL_DARK = {
     "family-friendly": ("Family", "#7FD3AE", "#1D3A2E"),
     "date-night": ("Date night", "#D2A8F0", "#362640"),
     "cant-miss": ("Can't miss", "#FF9B7A", "#45281F"),
 }
-# Card left-accent color per primary tag (keeps the old color-coding).
-TAG_ACCENT = {"family-friendly": "#1F7A55", "date-night": "#7C3E9E",
-              "cant-miss": "#C8472B"}
 
-# Dark-mode class overrides (Apple Mail). Gmail (non-app) ignores these and
-# falls back to its own auto-darkening of the light palette.
-_DARK_STYLE = """
-<style>
-@media (prefers-color-scheme: dark) {
-  .kw-body { background-color: #1E1A22 !important; color: #F3EDE4 !important; }
-  .kw-h1 { color: #F3EDE4 !important; border-bottom-color: #FF8A65 !important; }
-  .kw-summary { background-color: #4A3C1C !important; color: #F3EDE4 !important; }
-  .kw-muted { color: #B9AFB8 !important; }
-  .kw-picks { background-color: #FF8A65 !important; color: #1E1A22 !important; }
-  .kw-day { background-color: #29232E !important; color: #F3EDE4 !important; }
-  .kw-card { background-color: #29232E !important; border-color: #3C3442 !important; }
-  .kw-link { color: #F3EDE4 !important; }
-  .kw-desc { color: #B9AFB8 !important; }
-  .kw-kid { background-color: #1D3A2E !important; color: #7FD3AE !important; }
-  .kw-conflict { color: #FF9B7A !important; }
-  .kw-hr { border-top-color: #3C3442 !important; }
-  .kw-tag-fam { background-color: #1D3A2E !important; color: #7FD3AE !important; }
-  .kw-tag-date { background-color: #362640 !important; color: #D2A8F0 !important; }
-  .kw-tag-miss { background-color: #45281F !important; color: #FF9B7A !important; }
-  .kw-free { color: #7FD3AE !important; }
-  .kw-ctx { color: #7FD3AE !important; }
-}
-</style>"""
+# Dog mascot, inlined from the HTML design's #dog symbol (SVG <use> does
+# not work in email, so the shapes are inlined; degrades to brand text
+# where SVG is stripped).
+DOG_SVG = (
+    '<svg width="38" height="38" viewBox="0 0 200 200" '
+    'style="vertical-align:middle;" aria-hidden="true">'
+    '<ellipse cx="46" cy="92" rx="26" ry="46" transform="rotate(18 46 92)" fill="#9C6B3E"/>'
+    '<ellipse cx="154" cy="92" rx="26" ry="46" transform="rotate(-18 154 92)" fill="#9C6B3E"/>'
+    '<circle cx="100" cy="106" r="66" fill="#E7B574"/>'
+    '<ellipse cx="100" cy="134" rx="40" ry="30" fill="#F6DDB5"/>'
+    '<circle cx="76" cy="96" r="8" fill="#2A2530"/>'
+    '<circle cx="124" cy="96" r="8" fill="#2A2530"/>'
+    '<circle cx="79" cy="93" r="2.6" fill="#fff"/>'
+    '<circle cx="127" cy="93" r="2.6" fill="#fff"/>'
+    '<ellipse cx="100" cy="120" rx="13" ry="9" fill="#2A2530"/>'
+    '<path d="M86 136 Q100 148 114 136" stroke="#2A2530" stroke-width="4" fill="none" stroke-linecap="round"/>'
+    '<path d="M94 142 Q100 162 106 142 Z" fill="#E4572E"/>'
+    "</svg>"
+)
 
 _TIME_RE = re.compile(r"^(\d{1,2})(?::(\d{2}))?\s*([AP])\.?M\.?\.?$", re.I)
 
@@ -199,16 +193,11 @@ def require_price(e):
 def price_html(price):
     p = esc(price)
     if price.strip().lower() == "free":
-        return ('<span class="kw-free" style="color: #1F7A55; '
+        return (f'<span style="color: {PALETTE["leaf"]}; '
                 'font-weight: bold;">FREE</span>')
     if "not confirmed" in price.lower():
-        return (f'<span class="kw-muted" style="color: '
-                f'{PALETTE["muted"]};">{p}</span>')
+        return (f'<span style="color: {PALETTE["muted"]};">{p}</span>')
     return p
-
-
-TAG_PILL_CLASS = {"family-friendly": "kw-tag-fam", "date-night": "kw-tag-date",
-                  "cant-miss": "kw-tag-miss"}
 
 
 def _tags_html(e):
@@ -218,8 +207,8 @@ def _tags_html(e):
             continue
         label, fg, bg = TAG_PILL[t]
         pills.append(
-            f'<span class="{TAG_PILL_CLASS[t]}" style="display:inline-block;'
-            f'background:{bg};color:{fg};font-size:11px;font-weight:bold;'
+            f'<span style="display:inline-block;'
+            f'background:{bg};color:{fg};font-size:13px;font-weight:800;'
             f'padding:3px 10px;border-radius:999px;'
             f'font-family:{FONT_BODY};">{esc(label)}</span>')
     return " ".join(pills)
@@ -228,9 +217,9 @@ def _tags_html(e):
 def _kid_html(e, theme):
     label = theme["kid_label"]
     if label and e.get(theme["kid_field"]):
-        return (f' &nbsp;<span class="kw-kid" style="display:inline-block;'
-                f'background:#D8F0E4;'
-                f'color:#1F7A55;font-size:12px;font-weight:bold;'
+        return (f' &nbsp;<span style="display:inline-block;'
+                f'background:{PALETTE["leaf_soft"]};'
+                f'color:{PALETTE["leaf"]};font-size:13px;font-weight:800;'
                 f'padding:3px 10px;border-radius:999px;'
                 f'font-family:{FONT_BODY};">'
                 "\U0001F476 " + esc(label) + "</span>")
@@ -247,8 +236,8 @@ def _conflict_html(e):
     # calendar_context.overlaps(). Only HARD overlaps are flagged here;
     # context notes arrive separately via day_context_notes.
     if e.get("conflict") and e.get("conflict_with"):
-        return (f'<br><span class="kw-conflict" style="color:'
-                f'{PALETTE["accent_text"]};font-size:12px;">'
+        return (f'<br><span style="color:'
+                f'{PALETTE["accent_text"]};font-size:13px;">'
                 f"\u26A0\uFE0F {esc(e['conflict_with'])}</span>")
     return ""
 
@@ -258,37 +247,38 @@ def _area_short(e):
     return area.split(",")[0] if "," in area else area
 
 
-def _card_accent(e):
-    tags = e.get("tags") or []
-    if "cant-miss" in tags:
-        return TAG_ACCENT["cant-miss"]
-    if tags:
-        return TAG_ACCENT.get(tags[0], PALETTE["muted"])
-    return PALETTE["muted"]
-
-
-def _card_style(accent):
-    return (f"margin-bottom: 16px; padding: 14px 16px; "
-            f"background: {PALETTE['surface']}; "
-            f"border: 2px solid {PALETTE['line']}; "
-            f"border-left: 4px solid {accent}; border-radius: 14px;")
-
-
-def event_li(e, context_notes_html="", theme=None):
+def event_card(e, context_notes_html="", theme=None):
+    """One event card, matching the design's .event (sample edition)."""
     theme = _resolve_theme(theme)
     require_price(e)  # hard FAIL before any rendering
     tags = _tags_html(e)
-    accent = _card_accent(e)
     drive = esc(e.get("drive_time_from_home")
                 or e.get("drive_time_from_englewood") or "")
-    return f'''  <li class="kw-card" style="{_card_style(accent)}">
-    {tags} <strong><a class="kw-link" href="{esc(e['url'])}" style="color: {PALETTE['ink']}; text-decoration: none; font-family: {FONT_HEADING}; font-size: 16px;">{esc(e['name'])}</a></strong>{_kid_html(e, theme)}<br>
-    <span style="color: {PALETTE['ink']}; font-size: 14px;">\U0001F550 {esc(e.get('start_time') or 'See listing')} &nbsp;|&nbsp; \U0001F4CD {esc(e['venue'])}, {esc(_area_short(e))} ({drive}) &nbsp;|&nbsp; \U0001F4B0 {price_html(e['price'])}</span>{_conflict_html(e)}{context_notes_html}<br>
-    <span class="kw-desc" style="color: {PALETTE['muted']}; font-size: 13px;">{esc(e.get('description') or '')}</span>
-  </li>'''
+    return (
+        f'<div style="padding: 16px; border-radius: 16px; '
+        f'border: 2px solid {PALETTE["line"]}; '
+        f'background: {PALETTE["bg"]}; margin-bottom: 12px;">'
+        f'<p style="margin: 0 0 6px; color: {PALETTE["muted"]}; '
+        f'font-weight: 800; font-size: 14px;">'
+        f'{esc(e.get("start_time") or "See listing")}</p>'
+        f'<h3 style="margin: 0 0 8px; font-family: {FONT_HEADING}; '
+        f'font-size: 20px; font-weight: 600; color: {PALETTE["ink"]};">'
+        f'<a href="{esc(e["url"])}" style="color: {PALETTE["ink"]}; '
+        f'text-decoration: none;">{esc(e["name"])}</a>'
+        f"{_kid_html(e, theme)}</h3>"
+        f'<p style="margin: 0; font-size: 14px; font-weight: 700; '
+        f'color: {PALETTE["muted"]};">'
+        f"{tags} "
+        f'\U0001F4CD {esc(e["venue"])}, {esc(_area_short(e))} ({drive}) '
+        f"&nbsp;\U0001F4B0 {price_html(e['price'])}</p>"
+        f"{_conflict_html(e)}{context_notes_html}"
+        f'<p style="margin: 8px 0 0; color: {PALETTE["muted"]}; '
+        f'font-size: 13px;">{esc(e.get("description") or "")}</p>'
+        "</div>"
+    )
 
 
-def _all_weekend_li(name, recs, weekend, theme=None):
+def _all_weekend_card(name, recs, theme=None):
     theme = _resolve_theme(theme)
     s = recs[0]
     require_price(s)
@@ -297,11 +287,28 @@ def _all_weekend_li(name, recs, weekend, theme=None):
     tags = _tags_html(s)
     drive = esc(s.get("drive_time_from_home")
                 or s.get("drive_time_from_englewood") or "")
-    return f'''  <li class="kw-card" style="{_card_style(TAG_ACCENT['cant-miss'])}">
-    {tags} <strong><a class="kw-link" href="{esc(s['url'])}" style="color: {PALETTE['ink']}; text-decoration: none; font-family: {FONT_HEADING}; font-size: 16px;">{esc(s['name'])}</a></strong>{_kid_html(s, theme)}<br>
-    <span style="color: {PALETTE['ink']}; font-size: 14px;">\U0001F550 {esc(", ".join(day_names))} &nbsp;|&nbsp; \U0001F4CD {esc(s['venue'])} ({drive}) &nbsp;|&nbsp; \U0001F4B0 {price_html(s['price'])}</span>{_conflict_html(s)}<br>
-    <span class="kw-desc" style="color: {PALETTE['muted']}; font-size: 13px;">{esc(s.get('description') or '')}</span>
-  </li>'''
+    return (
+        f'<div style="padding: 16px; border-radius: 16px; '
+        f'border: 2px solid {PALETTE["line"]}; '
+        f'background: {PALETTE["bg"]}; margin-bottom: 12px;">'
+        f'<p style="margin: 0 0 6px; color: {PALETTE["muted"]}; '
+        f'font-weight: 800; font-size: 14px;">'
+        f'{esc(", ".join(day_names))}</p>'
+        f'<h3 style="margin: 0 0 8px; font-family: {FONT_HEADING}; '
+        f'font-size: 20px; font-weight: 600; color: {PALETTE["ink"]};">'
+        f'<a href="{esc(s["url"])}" style="color: {PALETTE["ink"]}; '
+        f'text-decoration: none;">{esc(s["name"])}</a>'
+        f"{_kid_html(s, theme)}</h3>"
+        f'<p style="margin: 0; font-size: 14px; font-weight: 700; '
+        f'color: {PALETTE["muted"]};">'
+        f"{tags} "
+        f'\U0001F4CD {esc(s["venue"])} ({drive}) '
+        f"&nbsp;\U0001F4B0 {price_html(s['price'])}</p>"
+        f"{_conflict_html(s)}"
+        f'<p style="margin: 8px 0 0; color: {PALETTE["muted"]}; '
+        f'font-size: 13px;">{esc(s.get("description") or "")}</p>'
+        "</div>"
+    )
 
 
 def _footer_html(theme):
@@ -311,21 +318,14 @@ def _footer_html(theme):
             f"{esc(theme['family_label'])} \u00B7 drive times from "
             f"{esc(theme['home_label'])}<br>")
     if theme.get("public_edition"):
-        return (f'<p class="kw-muted" style="color: {PALETTE["muted"]}; '
-                f'font-size: 12px; text-align: center;">'
+        return (f'<p style="color: {PALETTE["muted"]}; '
+                f'font-size: 14px; text-align: center;">'
                 f'{base}Reply STOP to unsubscribe.</p>')
-    dashboard_url = theme.get("dashboard_url")
-    if dashboard_url:
-        label = esc(theme.get("dashboard_label") or "Command Center")
-        link = (f'<a href="{esc(dashboard_url)}" '
-                f'style="color: {PALETTE["muted"]}; text-decoration: underline;">'
-                f'{label} \u2014 performance metrics</a>')
-        return (f'<p class="kw-muted" style="color: {PALETTE["muted"]}; '
-                f'font-size: 12px; text-align: center;">'
-                f'{base}{link}</p>')
-    return (f'<p class="kw-muted" style="color: {PALETTE["muted"]}; '
-            f'font-size: 12px; text-align: center;">'
-            f'{base.rstrip()}</p>')
+    return (f'<p style="color: {PALETTE["muted"]}; '
+            f'font-size: 14px; text-align: center;">'
+            f'{base}<a href="https://muse.ai/s/command-center-mockup-kxm6dxvx0p1bxya#performance" '
+            f'style="color: {PALETTE["muted"]}; text-decoration: underline;">'
+            f'K3 Command Center \u2014 performance metrics</a></p>')
 
 
 def render_newsletter(events, weekend, header_html, picks=None,
@@ -335,14 +335,14 @@ def render_newsletter(events, weekend, header_html, picks=None,
     events: list of canonical event dicts (with optional "conflict" /
         "conflict_with" annotations from the enrich stage).
     weekend: [fri, sat, sun] ISO date strings.
-    header_html: bespoke weekly header paragraph (HTML, written fresh by
-        the worker). Must be non-blank -- a static or empty header is a
-        template regression.
+    header_html: bespoke weekly header HTML (written fresh by the worker).
+        Inserted verbatim inside the edition card's lede block -- must be
+        non-blank; a static or empty header is a template regression.
     picks: [{"name", "detail", "url"}] can't-miss picks.
     day_context_notes: {date: [note, ...]} family/context notes rendered
         under that day's section (the 🏡 notes).
-    weather_note: optional one-line weather summary rendered above the
-        day sections.
+    weather_note: optional one-line weather summary rendered as the
+        weather strip above the events.
     """
     theme = _resolve_theme(theme)
     if not (header_html or "").strip():
@@ -353,83 +353,105 @@ def render_newsletter(events, weekend, header_html, picks=None,
 
     by_day, multi = group_events(events)
 
-    picks_html = "\n".join(
-        f'  <li style="margin-bottom: 8px;">\u2B50 <strong><a class="kw-link" href="{esc(p["url"])}" style="color:{PALETTE["ink"]};">{esc(p["name"])}</a></strong> <span class="kw-muted" style="color:{PALETTE["muted"]};font-size:13px;">\u2014 {esc(p["detail"])}</span></li>'
+    picks_html = "".join(
+        f'<p style="margin: 0 0 8px;">\u2B50 <strong>'
+        f'<a href="{esc(p["url"])}" style="color:{PALETTE["accent_text"]};">'
+        f'{esc(p["name"])}</a></strong> '
+        f'<span style="color:{PALETTE["muted"]};font-size:13px;">'
+        f'\u2014 {esc(p["detail"])}</span></p>'
         for p in picks if p.get("url"))
 
     day_sections = ""
     for date in weekend:
         day_events = by_day.get(date, [])
         ctx = "".join(
-            f'<br><span class="kw-ctx" style="color:#1F7A55;font-size:12px;">'
-            f"\U0001F3E1 {esc(n)}</span>"
+            f'<p style="margin: 6px 0 0; color:{PALETTE["leaf"]};'
+            f'font-size:13px;">'
+            f"\U0001F3E1 {esc(n)}</p>"
             for n in day_context_notes.get(date, []))
-        lis = "\n".join(event_li(e, ctx if i == 0 else "", theme=theme)
-                        for i, e in enumerate(day_events))
-        day_sections += f'''
-<h2 class="kw-day" style="font-family:{FONT_HEADING};background: {PALETTE["ink"]}; color: white; padding: 12px 16px; border-radius: 14px;">
-  \U0001F4C5 {esc(day_label(date))} <span style="font-weight:normal;font-size:14px;">({len(day_events)} events)</span>
-</h2>
-<ul style="list-style: none; padding: 0;">
-{lis}
-</ul>'''
+        cards = "".join(event_card(e, theme=theme) for e in day_events)
+        day_sections += (
+            f'<h2 style="font-family:{FONT_HEADING};color:{PALETTE["ink"]};'
+            f'font-size:24px;font-weight:700;margin:26px 0 12px;">'
+            f"\U0001F4C5 {esc(day_label(date))} "
+            f'<span style="font-weight:normal;font-size:14px;'
+            f'color:{PALETTE["muted"]};">({len(day_events)} events)</span>'
+            f"</h2>"
+            f"{cards}{ctx}"
+        )
 
-    aw_lis = [_all_weekend_li(name, recs, weekend, theme=theme)
-              for name, recs in sorted(multi.items())]
+    aw_cards = "".join(_all_weekend_card(name, recs, theme=theme)
+                       for name, recs in sorted(multi.items()))
     all_weekend = ""
-    if aw_lis:
-        all_weekend = f'''
-<h2 class="kw-day" style="font-family:{FONT_HEADING};background: {PALETTE["ink"]}; color: white; padding: 12px 16px; border-radius: 14px;">
-  \U0001F5D3\uFE0F All Weekend <span style="font-weight:normal;font-size:14px;">({len(aw_lis)} events)</span>
-</h2>
-<ul style="list-style: none; padding: 0;">
-{chr(10).join(aw_lis)}
-</ul>'''
+    if aw_cards:
+        all_weekend = (
+            f'<h2 style="font-family:{FONT_HEADING};color:{PALETTE["ink"]};'
+            f'font-size:24px;font-weight:700;margin:26px 0 12px;">'
+            f"\U0001F5D3\uFE0F All Weekend "
+            f'<span style="font-weight:normal;font-size:14px;'
+            f'color:{PALETTE["muted"]};">({len(multi)} events)</span>'
+            f"</h2>"
+            f"{aw_cards}"
+        )
 
     total = sum(len(v) for v in by_day.values()) + len(multi)
-    weather_html = (f'<p class="kw-muted" style="color:{PALETTE["muted"]};'
-                    f'font-size:13px;">'
-                    f"\u2600\uFE0F {esc(weather_note)}</p>\n"
-                    if weather_note else "")
+    weather_html = ""
+    if weather_note:
+        weather_html = (
+            f'<div style="padding: 10px 6px; border-radius: 16px; '
+            f'background: {PALETTE["sky_soft"]}; text-align: center; '
+            f'font-weight: 800; font-size: 15px; color: {PALETTE["ink"]}; '
+            f'margin: 18px 0;">'
+            f"\u2600\uFE0F {esc(weather_note)}</div>"
+        )
 
-    legend = ("<p class=\"kw-muted\" style=\"color:"
-              f"{PALETTE['muted']};font-size:14px;\">"
-              f"{total} verified events across Friday\u2013Sunday.<br>"
-              f"{_tags_html({'tags': ['family-friendly', 'date-night', 'cant-miss']})} "
-              f"\u00B7 \u26A0\uFE0F = calendar overlap</p>")
+    # Edition tag: "Oct 2–4" style range, like the design's tag-sample.
+    tag = (f"{datetime.strptime(weekend[0], '%Y-%m-%d').strftime('%b %-d')}"
+           f"\u2013"
+           f"{datetime.strptime(weekend[2], '%Y-%m-%d').strftime('%-d')}")
 
     doc = f"""<!DOCTYPE html>
 <html>
 <head><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<meta name="supported-color-schemes" content="light dark">
-{_DARK_STYLE}
+<meta name="color-scheme" content="dark">
 </head>
 <body style="margin: 0; padding: 0; background-color: {PALETTE["bg"]};">
-<div class="kw-body" style="font-family: {FONT_BODY}; max-width: 700px; margin: 0 auto; color: {PALETTE["ink"]}; background-color: {PALETTE["bg"]}; padding: 0 8px;">
+<div style="font-family: {FONT_BODY}; max-width: 700px; margin: 0 auto; color: {PALETTE["ink"]}; background-color: {PALETTE["bg"]}; padding: 18px 8px; font-size: 17px; line-height: 1.6;">
 
-<h1 class="kw-h1" style="font-family:{FONT_HEADING};color: {PALETTE["ink"]}; border-bottom: 3px solid {PALETTE["cta"]}; padding-bottom: 10px;">
-  \U0001F389 {esc(subject_for(weekend, theme))}
-</h1>
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 0 18px;">
+  {DOG_SVG}
+  <span style="font-family: {FONT_HEADING}; font-weight: 700; font-size: 22px; color: {PALETTE["ink"]};">{esc(theme["newsletter_name"])}</span>
+</div>
 
-<p class="kw-summary" style="color: {PALETTE["ink"]}; font-size: 15px; line-height: 1.6; background: {PALETTE["sun_soft"]}; padding: 14px 16px; border-radius: 14px;">
+<div style="background: {PALETTE["surface"]}; border-radius: 22px; border: 2px solid {PALETTE["line"]}; padding: 22px;">
+
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding-bottom: 16px; border-bottom: 2px dashed {PALETTE["line"]};">
+  <strong style="font-family: {FONT_HEADING}; font-weight: 700; font-size: 22px; color: {PALETTE["ink"]};">This weekend in Denver</strong>
+  <span style="padding: 4px 12px; border-radius: 999px; background: {PALETTE["berry_soft"]}; color: {PALETTE["berry"]}; font-weight: 800; font-size: 13px;">{esc(tag)}</span>
+</div>
+
+<div style="color: {PALETTE["muted"]}; font-size: 17px; margin: 14px 0 0;">
   {header_html}
-</p>
-
-{legend}
+</div>
 
 {weather_html}
-<h2 class="kw-picks" style="font-family:{FONT_HEADING};background: {PALETTE["cta"]}; color: {PALETTE["cta_ink"]}; padding: 12px 16px; border-radius: 14px;">
-  \u2B50 Can't-Miss Picks
+
+<h2 style="font-family:{FONT_HEADING};color:{PALETTE["ink"]};font-size:24px;font-weight:700;margin:26px 0 12px;">
+  \u2B50 Can't-miss picks
 </h2>
-<ul style="list-style: none; padding: 0;">
 {picks_html}
-</ul>
 
 {day_sections}
 {all_weekend}
 
-<hr class="kw-hr" style="border: none; border-top: 1px solid {PALETTE["line"]}; margin: 30px 0 12px;">
+<p style="margin-top: 22px; color: {PALETTE["muted"]}; font-size: 14px; text-align: center;">
+  {total} verified events across Friday\u2013Sunday.<br>
+  {_tags_html({"tags": ["family-friendly", "date-night", "cant-miss"]})}
+</p>
+
+</div>
+
+<hr style="border: none; border-top: 1px solid {PALETTE["line"]}; margin: 30px 0 12px;">
 {_footer_html(theme)}
 
 </div>
