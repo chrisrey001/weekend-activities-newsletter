@@ -12,12 +12,14 @@ import weather_hook as wh
 WK = ["2026-09-18", "2026-09-19", "2026-09-20"]
 
 KIWI_THEME = {
-    "newsletter_name": "Kiwi's Corner",
+    "newsletter_name": "Kiwi's Weekend Guide",
     "footer_brand": "Kiwi's Weekend Guide",
-    "family_label": "Chris, Kristen & Ava",
+    "family_label": "the family",
     "home_label": "Englewood",
     "kid_field": "kid_friendly",
-    "kid_label": "Ava-approved",
+    "kid_label": "Family pick",
+    "dashboard_url": "https://example.com/dashboard",
+    "dashboard_label": "Command Center",
 }
 
 
@@ -110,7 +112,7 @@ class TestTemplate(unittest.TestCase):
                                   theme=KIWI_THEME)
         plain = _html.unescape(doc)
         self.assertIn("Kiwi's Weekend Guide", plain)
-        self.assertIn("curated for Chris, Kristen & Ava", plain)
+        self.assertIn("curated for the family", plain)
         self.assertIn("drive times from Englewood", plain)
         self.assertNotIn(t.LEGACY_BUG_BRAND, plain)
 
@@ -126,7 +128,7 @@ class TestTemplate(unittest.TestCase):
         import html as _html
         e = event(kid_friendly=True)
         doc = t.render_newsletter([e], WK, "<p>Header</p>", theme=KIWI_THEME)
-        self.assertIn("Ava-approved", _html.unescape(doc))
+        self.assertIn("Family pick", _html.unescape(doc))
         # no badge without a kid label in the theme
         doc2 = t.render_newsletter([e], WK, "<p>Header</p>")
         self.assertNotIn("approved", _html.unescape(doc2))
@@ -157,3 +159,71 @@ class TestTemplate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPublicFooter(unittest.TestCase):
+    def _render(self, public):
+        theme = dict(KIWI_THEME)
+        theme["public_edition"] = public
+        return t.render_newsletter([event()], WK, "<p>Header</p>", theme=theme)
+
+    def test_private_keeps_metrics_link(self):
+        doc = self._render(False)
+        self.assertIn("Command Center", doc)
+        self.assertIn("https://example.com/dashboard", doc)
+        self.assertNotIn("Reply STOP", doc)
+
+    def test_private_without_dashboard_url_has_no_link(self):
+        theme = dict(KIWI_THEME)
+        theme["dashboard_url"] = None
+        theme["public_edition"] = False
+        doc = t.render_newsletter([event()], WK, "<p>Header</p>", theme=theme)
+        self.assertNotIn("Command Center", doc)
+        self.assertNotIn("<a href", doc.split("curated for")[-1])
+
+    def test_public_drops_metrics_link_adds_stop(self):
+        doc = self._render(True)
+        self.assertNotIn("Command Center", doc)
+        self.assertNotIn("https://example.com/dashboard", doc)
+        self.assertIn("Reply STOP to unsubscribe", doc)
+
+    def test_public_footer_has_no_names(self):
+        doc = self._render(True)
+        for name in ("Jordan", "Casey", "Riley"):
+            self.assertNotIn(name, doc)
+
+
+class TestRedesignTokens(unittest.TestCase):
+    """Claude's tokens.json brand must show up in the render."""
+
+    def setUp(self):
+        self.doc = t.render_newsletter(
+            [event(tags=["family-friendly", "cant-miss"], kid_friendly=True)],
+            WK, "<p>Header</p>", theme=KIWI_THEME)
+
+    def test_brand_tokens_present(self):
+        for token in ("#FFF7EA", "#2A2530", "#C8472B", "#FFE7A3",
+                      "#EADFCF", "#6B6270"):
+            self.assertIn(token, self.doc, token)
+
+    def test_pill_tags(self):
+        self.assertIn("kw-tag-fam", self.doc)
+        self.assertIn("kw-tag-miss", self.doc)
+        self.assertIn(">Family</span>", self.doc)
+        self.assertIn("Can&#x27;t miss</span>", self.doc)
+
+    def test_dark_mode_support(self):
+        self.assertIn('name="color-scheme" content="light dark"', self.doc)
+        self.assertIn("@media (prefers-color-scheme: dark)", self.doc)
+        self.assertIn("#1E1A22", self.doc)
+
+    def test_rounded_cards(self):
+        self.assertIn("border-radius: 14px", self.doc)
+
+    def test_old_palette_gone(self):
+        for old in ("#1a1a2e", "#e67e22", "#f9f9f9", "#fdf6ec", "#4CAF50"):
+            self.assertNotIn(old, self.doc, old)
+
+    def test_email_fonts(self):
+        self.assertIn("Fredoka", self.doc)
+        self.assertIn("Nunito", self.doc)

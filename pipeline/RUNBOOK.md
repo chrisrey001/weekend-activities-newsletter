@@ -1,4 +1,4 @@
-# Kiwi's Corner — Operator RUNBOOK
+# Kiwi's Weekend Guide — Operator RUNBOOK
 
 **For the Thursday cron worker (agent).** The pipeline lives in
 `~/workspace/kiwis-corner/pipeline/`; the architecture spec is
@@ -74,7 +74,7 @@ sources_failed[]}`. Target 40–65 verified events (the pipeline halts below 40)
 ### Step 3 — Write the bespoke header + picks
 
 - **Header** (`header.html`): a personalized paragraph written fresh each
-  week — big tickets, weather-driven picks, Ava-friendly standouts, calendar
+  week — big tickets, weather-driven picks, kid-friendly standouts, calendar
   context (nanny schedule, visitors, travel). Never a static template line.
 - **Picks** (`picks.json`): `{"picks": [{"name", "detail", "url"}, ...]}` —
   the can't-miss picks, each URL event-specific.
@@ -159,7 +159,7 @@ than write an ambiguous log — phrase failure notes accordingly.
   footer, re-run. Link failures: replace the URL with the operator page or
   drop the event.
 - **Approval-wait (send parked on a connector approval)** → the ~8:45
-  approval-nudge check (PLAN.md incident fix) pings Chris; do not declare
+  approval-nudge check (PLAN.md incident fix) pings the owner; do not declare
   success until `SendResult.status == "sent"`.
 - **send `failed`** → do NOT retry blindly. Check Gmail's sent mail first for
   the subject+recipient+today (the module already does this pre-send and
@@ -173,8 +173,8 @@ than write an ambiguous log — phrase failure notes accordingly.
 ## 4. Sender policy
 
 The send goes to **every recipient listed in the config file**, as ONE
-message. K3 is the sole sender (the old Tasklet parallel-run arrangement
-ended 2026-09-26 — it is retired; do not ask about it). A run counts as a
+message. This sender is the sole sender (the old parallel-run arrangement
+ended 2026-09-26 — it is retired). A run counts as a
 success only if Gmail Sent shows one message with all configured recipients
 in To, a concrete message ID, and a matching run-log entry. `--recipient`
 overrides the config for testing only; production runs use the config.

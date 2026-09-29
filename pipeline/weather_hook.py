@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Weather-based indoor-picks hook for Kiwi's Corner (documented stub).
+"""Weather-based indoor-picks hook for Kiwi's Weekend Guide (documented stub).
 
 Deterministic, no network. Reads an INJECTED weather JSON (supplied by the
 cron worker via run.py --weather-json) and returns deterministic weather

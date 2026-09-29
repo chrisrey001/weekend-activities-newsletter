@@ -6,8 +6,8 @@ stages (not just classify() in isolation):
   - all-day events (even ones "overlapping" event hours, e.g. the
     "49ers game" all-day placeholder) -> informational, and they must NOT
     suppress any day's events or flag any guide event;
-  - timed family-context events ("Nanny's off — Ava day",
-    "Candice visiting") -> context_notes (never flags);
+  - timed family-context events ("Nanny's off — Riley day",
+    "Jordan visiting") -> context_notes (never flags);
   - other timed events -> hard_conflicts (only tier that can flag, and
     only when the windows genuinely overlap);
   - overlaps() boundary: cal end == guide start is NOT an overlap.
@@ -37,9 +37,9 @@ CAL = [
     # old single-flag rule would have used to nuke Saturday's events.
     {"title": "49ers game", "start": "2026-09-19", "end": "2026-09-20",
      "all_day": True, "description": "all-day TBD placeholder"},
-    {"title": "Nanny's off \u2014 Ava day", "start": "2026-09-18T08:00",
+    {"title": "Nanny's off \u2014 Riley day", "start": "2026-09-18T08:00",
      "end": "2026-09-18T17:00", "all_day": False, "description": ""},
-    {"title": "Candice visiting", "start": "2026-09-19T10:00",
+    {"title": "Jordan visiting", "start": "2026-09-19T10:00",
      "end": "2026-09-19T12:00", "all_day": False, "description": ""},
     {"title": "Dentist appointment", "start": "2026-09-18T12:00",
      "end": "2026-09-18T12:45", "all_day": False, "description": ""},
@@ -60,7 +60,7 @@ GUIDE = [
      "description": "49ers placeholder day -- must not be suppressed"},
     {"name": "Brunch concert", "date": "2026-09-19", "start_time": "11:00 AM",
      "price": "$10", "venue": "V", "url": "https://example.com/5",
-     "description": "overlaps Candice visiting (context tier) -- no flag"},
+     "description": "overlaps Jordan visiting (context tier) -- no flag"},
 ]
 
 
@@ -76,7 +76,7 @@ class TestTierClassification(unittest.TestCase):
         t = cc.classify(CAL[1:3], WEEKEND)
         self.assertEqual(
             sorted(e["title"] for e in t["context_notes"]),
-            ["Candice visiting", "Nanny's off \u2014 Ava day"])
+            ["Jordan visiting", "Nanny's off \u2014 Riley day"])
         self.assertEqual(t["hard_conflicts"], [])
         self.assertEqual(t["informational"], [])
 
@@ -144,7 +144,7 @@ class TestEnrichIntegration(unittest.TestCase):
                          ["49ers game"])
 
     def test_context_tier_never_flags_even_on_real_overlap(self):
-        # Brunch concert 11:00 AM + 120 min genuinely overlaps Candice
+        # Brunch concert 11:00 AM + 120 min genuinely overlaps Jordan
         # visiting 10:00-12:00, but context_notes must never flag events.
         self.assertTrue(cc.overlaps(
             CAL[2], {"date": "2026-09-19", "start_time": "11:00 AM"}))
@@ -155,8 +155,8 @@ class TestEnrichIntegration(unittest.TestCase):
     def test_context_notes_reach_day_notes(self):
         _, day_notes, _, ctx = self._enrich()
         self.assertEqual(len(ctx["context_notes"]), 2)
-        self.assertTrue(any("Ava day" in n for n in day_notes["2026-09-18"]))
-        self.assertTrue(any("Candice" in n for n in day_notes["2026-09-19"]))
+        self.assertTrue(any("Riley day" in n for n in day_notes["2026-09-18"]))
+        self.assertTrue(any("Jordan" in n for n in day_notes["2026-09-19"]))
 
 
 class TestRenderKeepsAllEvents(unittest.TestCase):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Deterministic 3-tier calendar classification for Kiwi's Corner.
+"""Deterministic 3-tier calendar classification for Kiwi's Weekend Guide.
 
-Pure function, no network access. Takes Chris's Google Calendar events for the
+Pure function, no network access. Takes the household's Google Calendar events for the
 weekend window and sorts them into three tiers the render stage consumes:
 
   - "hard_conflicts": timed events that are NOT family/context notes. The
@@ -50,7 +50,7 @@ FAMILY_KEYWORDS = (
     "birthday", "anniversary", "school", "camp", "daycare", "potty",
 )
 # Note: "visit" is included alongside the specified "visitor" so that
-# "visiting"/"visits" (the calendar's usual phrasing, e.g. "Candice
+# "visiting"/"visits" (the calendar's usual phrasing, e.g. "Jordan
 # visiting") also classify as family context. Substring matching means
 # "visitor" is covered by "visit" too.
 
@@ -204,7 +204,7 @@ if __name__ == "__main__":
          "end": "2026-09-18T12:45", "all_day": False, "description": ""},
         {"title": "Nanny off", "start": "2026-09-18T08:00",
          "end": "2026-09-18T17:00", "all_day": False,
-         "description": "Ava day"},
+         "description": "Riley day"},
         {"title": "Anniversary", "start": "2026-09-17", "end": "2026-09-18",
          "all_day": True, "description": "4th anniversary"},
         {"title": "Next Monday thing", "start": "2026-09-21T09:00",

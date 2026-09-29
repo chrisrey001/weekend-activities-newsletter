@@ -44,7 +44,7 @@ spec.loader.exec_module(run)
 RUN_DATE = "2026-09-17"
 WEEKEND = ["2026-09-18", "2026-09-19", "2026-09-20"]
 SUBJECT = "Kiwi's Weekend Guide \u2014 E2E Test"
-RECIPIENT = "chris.rey001@gmail.com"
+RECIPIENT = "you@example.com"
 
 
 def today_rfc():

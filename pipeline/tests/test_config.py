@@ -90,3 +90,46 @@ class TestTheme(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPublicEditionAndFlags(unittest.TestCase):
+    def test_public_edition_defaults_false(self):
+        cfg = config.load_config(write_cfg(BASE))
+        self.assertFalse(cfg["newsletter"]["public_edition"])
+        self.assertFalse(config.theme_from_config(cfg)["public_edition"])
+
+    def test_public_edition_passthrough(self):
+        cfg = config.load_config(write_cfg(BASE + """\
+newsletter:
+  public_edition: true
+"""))
+        self.assertTrue(config.theme_from_config(cfg)["public_edition"])
+
+    def test_calendar_flag_defaults_false(self):
+        cfg = config.load_config(write_cfg(BASE))
+        self.assertFalse(cfg["features"]["calendar_integration"])
+
+    def test_calendar_flag_true(self):
+        cfg = config.load_config(write_cfg(BASE + """\
+features:
+  calendar_integration: true
+"""))
+        self.assertTrue(cfg["features"]["calendar_integration"])
+
+
+class TestPublicConfig(unittest.TestCase):
+    def test_public_edition_allows_empty_recipients(self):
+        cfg = config.load_config(write_cfg(BASE + """\
+newsletter:
+  public_edition: true
+email:
+  recipients: []
+"""))
+        self.assertEqual(cfg["email"]["recipients"], [])
+
+    def test_private_edition_still_requires_recipients(self):
+        with self.assertRaises(ValueError):
+            config.load_config(write_cfg(BASE + """\
+email:
+  recipients: []
+"""))

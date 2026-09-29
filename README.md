@@ -6,7 +6,7 @@ a reusable template for any family to run their own.
 This repo has **two purposes**:
 
 1. **The production framework** for one family (the Reys — Englewood, CO,
-   newsletter name "Kiwi's Corner"). Every Thursday morning an agent
+   newsletter name "Kiwi's Weekend Guide"). Every Thursday morning an agent
    researches the upcoming Friday–Sunday, verifies 40–65 local events, and
    sends one personalized HTML email to the family: drive times from home,
    confirmed prices, calendar-aware scheduling notes, weather-aware picks,
@@ -57,6 +57,18 @@ production run ──────► approval watch ──────► watchd
 6. **Send** (`send_hardened.py`) — Sent-first idempotency: one message to all
    configured recipients; a `sent` status is only ever recorded with a real
    Gmail message ID confirmed in Sent.
+
+### Editions — one research pass, multiple audiences
+
+- **Private edition** (`config.yaml`): your household. Calendar integration
+  on, drive times from your address, your private dashboard link in the
+  footer.
+- **Public/friends edition** (`config.public.yaml`): set
+  `newsletter.public_edition: true` and `features.calendar_integration:
+  false`. No names, no calendar access, neutral drive-time language, a
+  `Reply STOP to unsubscribe.` footer line, and no internal links. Send one
+  message per subscriber with `--recipient` — never group subscriber
+  addresses in one To line.
 
 ### Operator docs
 

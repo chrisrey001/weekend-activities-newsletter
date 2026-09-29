@@ -1,14 +1,14 @@
-# Test fixture: Kiwi's Corner values with throwaway emails.
+# Test fixture: Kiwi's Weekend Guide values with throwaway emails.
 # Mirrors the production config so e2e tests assert real branding.
 newsletter:
-  name: "Kiwi's Corner"
+  name: "Kiwi's Weekend Guide"
   footer_brand: "Kiwi's Weekend Guide"
   target_events: 50
 family:
-  members: ["Chris", "Kristen", "Ava"]
-  kid_name: "Ava"
+  members: ["Jordan", "Casey", "Riley"]
+  kid_name: "Riley"
   kid_age_years: 2
-  kid_friendly_label: "Ava-approved"
+  kid_friendly_label: "Family pick"
 location:
   timezone: "America/Denver"
   metro: "Denver"

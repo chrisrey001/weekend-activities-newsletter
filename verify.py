@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kiwi's Corner deterministic event verifier.
+"""Kiwi's Weekend Guide deterministic event verifier.
 
 Pipeline step 5 (see PLAN.md). Reads runs/<date>/events.json, runs a battery
 of DETERMINISTIC checks (no LLM calls), and exits non-zero on any FAIL so the

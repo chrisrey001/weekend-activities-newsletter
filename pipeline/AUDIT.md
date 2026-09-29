@@ -1,4 +1,4 @@
-# Kiwi's Corner — Send-Path Hardening Audit
+# Kiwi's Weekend Guide — Send-Path Hardening Audit
 
 **Auditor:** test-and-audit subagent · **Date:** 2026-09-17 (after production run #1)
 **Scope:** `~/workspace/kiwis-corner/pipeline/` — the durable pipeline built by
@@ -11,9 +11,8 @@ no Gmail inbox was read, and no cron was created/changed during this audit
 Production run #1 (Thu 2026-09-17, ~08:00 MDT) completed research/render (72
 verified events) but the Gmail send parked on an unanswered connector
 approval from ~08:50 MDT while the run log falsely recorded "sent once" with
-no message ID. The watchdog caught it at 09:30; Tasklet's send covered the
-family. Root cause: no verified-send gate. The real send completed at 10:21
-after Chris approved.
+no message ID. The watchdog caught it at 09:30; the legacy sender's parallel send covered the household. Root cause: no verified-send gate. The real send completed at 10:21
+after the owner approved.
 
 ---
 
@@ -87,18 +86,18 @@ none exist yet):
 - **`kiwis-corner-send-approval-watch`** — Thursdays **~08:45
   America/Denver** (after the 08:00 run, before the 09:30 watchdog).
   1. Check Sent first: today's "Kiwi's Weekend Guide" to
-     `chris.rey001@gmail.com`. If found → one-line all-clear, STOP.
-  2. If not in Sent and a pending Kiwi's Corner Gmail-send approval
-     (+send / users.messages.send) exists → alert Chris in chat that the
+     `you@example.com`. If found → one-line all-clear, STOP.
+  2. If not in Sent and a pending Kiwi's Weekend Guide Gmail-send approval
+     (+send / users.messages.send) exists → alert the owner in chat that the
      guide is built and parked on his approval; tapping approve releases
      it; the 9:30 watchdog confirms delivery.
-  3. If not in Sent and no approval pending → alert Chris the run needs
+  3. If not in Sent and no approval pending → alert the owner the run needs
      attention; quote run-log status/notes; no speculation.
   - **Idempotency rule (hard):** the watch never triggers a send — alert
     only. No `+send`, no retries, no drafts.
 - **`kiwis-corner-production-run`** (runonce 2026-09-24T08:00) and
   **`kiwis-corner-watchdog`** (runonce 2026-09-24T09:30) specs are in §3 of
-  the same doc. 9/24 stays parallel-run (Chris only) because 9/17 did not
+  the same doc. 9/24 stays parallel-run (owner only) because 9/17 did not
   land clean.
 
 **New in this audit:** `pipeline/approval_watch_logic.py::decide()` is a
@@ -152,9 +151,9 @@ events are never dropped by the enrich stage.
 | Failed send never exits 0 | `run.py` raises `PipelineHalt` after writing the log (**added in this audit**) |
 | No silent fallback send path | `run.py::load_send_module` raises loud `ImportError` on missing/differing `send_hardened.py` |
 | Unknown send status → halt | `run.py::stage_send` treats unknown status as failed (`PipelineHalt`) |
-| Parallel-run recipient policy | `--recipient` default `chris.rey001@gmail.com`; Kristen excluded until Chris cancels Tasklet (`RUNBOOK.md` §4) |
+| Parallel-run recipient policy | `--recipient` default `you@example.com`; second recipient excluded until the legacy sender is retired (`RUNBOOK.md` §4) |
 | Multi-day events consolidate | `template.group_events` → "All Weekend" section |
-| Tagging + Ava-friendly callouts | `template.TAG_EMOJI`/`TAG_COLOR`; `_ava_html` "👶 Ava-approved" |
+| Tagging + kid-friendly callouts | category pill tags; `_kid_badge_html` 'Family pick' |
 | Watchdog + approval nudge | `approval_watch.md` cron specs (8:45 watch, 9:30 watchdog) |
 | Dry-run never sends | `send_newsletter` dry_run short-circuits before Step 3 |
 
@@ -197,7 +196,7 @@ New tests, by property:
   linked to `approval_watch.md`).
 - **(d) Calendar tiers** — `tests/test_calendar_tiers.py` (12 tests):
   all-day "49ers game" placeholder → informational only;
-  "Nanny's off — Ava day" / "Candice visiting" → context_notes;
+  "Nanny's off — Riley day" / "Jordan visiting" → context_notes;
   "Dentist appointment" → hard_conflicts; boundary (cal end == guide
   start) is not an overlap; end-to-end through `run.stage_enrich` only
   the genuine dentist overlap is flagged (context-tier overlap and the

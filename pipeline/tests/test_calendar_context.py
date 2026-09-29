@@ -32,9 +32,9 @@ class TestClassify(unittest.TestCase):
     def test_family_keywords_go_to_context_notes(self):
         cases = [
             ("Nanny off", ""),
-            ("Ava doctor visit", ""),
+            ("Riley doctor visit", ""),
             ("Flight to Chicago", ""),
-            ("Kristen's birthday dinner", ""),
+            ("Casey's birthday dinner", ""),
             ("Potty training block", ""),
             ("Daycare tour", ""),
             ("School orientation", ""),

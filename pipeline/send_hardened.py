@@ -1,4 +1,4 @@
-"""Verified send gate for the Kiwi's Corner newsletter.
+"""Verified send gate for the Kiwi's Weekend Guide newsletter.
 
 Contract (imported lazily by pipeline/run.py -- the interface is validated
 by run.py's load_send_module(); do not rename anything without updating it):
@@ -40,7 +40,7 @@ ASSUMPTIONS (documented, per contract):
   2. The gmail adapter exposes:
          send(to, subject, html_body, sender=None) -> str | None
              (Gmail message ID). `sender` is the full From value, e.g.
-             "Kiwi <chris.rey001@gmail.com>"; None uses the account default.
+             "Kiwi <you@example.com>"; None uses the account default.
          search_sent(subject, recipient, date_str) -> list[dict]
      where each dict has keys "id", "to", "subject", "date" (the Date header
      as Gmail returns it, e.g. "Thu, 17 Sep 2026 08:12:00 -0600").
@@ -68,7 +68,7 @@ ASSUMPTIONS (documented, per contract):
        "failed". Gmail performs nothing on an expired approval (observed
        2026-09-17: "approval_expired ... The action was not performed"), so
        a timed-out send is safe to report as failed. The 8:45 approval-watch
-       cron (see approval_watch.md) exists precisely to alert Chris when the
+       cron (see approval_watch.md) exists precisely to alert the owner when the
        send is parked on his approval instead of silently missing it.
   7. run_id is for traceability only; it is echoed into notes, never into
      the message or the matching logic.
@@ -138,8 +138,8 @@ def send_newsletter(*, html_body: str, subject: str, recipient: str,
                     gmail=None) -> SendResult:
     """Send the newsletter with idempotency + verified-send gating.
 
-    `sender` is the From display identity, e.g. "Kiwi <chris.rey001@gmail.com>".
-    None keeps the account default. (Newsletter-only branding: the shared K3
+    `sender` is the From display identity, e.g. "Kiwi <you@example.com>".
+    None keeps the account default. (Newsletter-only branding: the shared agent
     alias keeps its own display name for other workflows.)
 
     Steps: (1) idempotency check against today's Sent; (2) dry-run short-
@@ -269,8 +269,8 @@ def _norm_subject(value: Any) -> str:
 def _split_recipients(recipient: Any) -> list:
     """Split a comma/semicolon-separated recipient string into addresses.
 
-    Since Tasklet's cancellation (2026-09-26) the newsletter goes to both
-    Chris and Kristen in ONE message, so matching must require EVERY
+    Since the legacy sender's retirement (2026-09-26) the newsletter goes to both
+    both recipients in ONE message, so matching must require EVERY
     address present in the To header -- never just one of them.
     """
     return [p.strip() for p in re.split(r"[;,]", str(recipient or ""))
@@ -453,7 +453,7 @@ class CliGmailAdapter:
         argv = [self.cli, "gmail", "+send", "--to", to, "--subject", subject,
                 "--body", html_body, "--html", "--format", "json"]
         if sender:
-            # Full From value, e.g. "Kiwi <chris.rey001@gmail.com>".
+            # Full From value, e.g. "Kiwi <you@example.com>".
             # Verified 2026-09-28 via draft: the CLI preserves the display
             # name in the sent message's From header.
             argv += ["--from", sender]

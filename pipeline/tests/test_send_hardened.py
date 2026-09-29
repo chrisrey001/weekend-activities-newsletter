@@ -32,7 +32,7 @@ from send_hardened import (  # noqa: E402
 )
 
 SUBJECT = "Kiwi's Weekend Guide \u2014 Friday, September 25 \u2013 Sunday, September 27"
-RECIPIENT = "chris.rey001@gmail.com"
+RECIPIENT = "you@example.com"
 RUN_ID = "test-run-001"
 HTML = "<html><body><p>test</p></body></html>"
 
@@ -112,7 +112,7 @@ class TestIdempotency(unittest.TestCase):
 
     def test_different_recipient_does_not_block(self):
         g = MockGmail(
-            search_results=[candidate(to="kndufour@gmail.com")],
+            search_results=[candidate(to="partner@example.com")],
             send_id="msg_new1")
         res = send_newsletter(html_body=HTML, subject=SUBJECT,
                               recipient=RECIPIENT, run_id=RUN_ID, gmail=g)
@@ -233,13 +233,13 @@ class TestSendAndVerify(unittest.TestCase):
         self.assertIn("DO NOT retry without checking the mailbox", res.notes)
 
     def test_to_case_insensitive(self):
-        g = MockGmail(search_results=[candidate(to="Chris.Rey001@Gmail.com")])
+        g = MockGmail(search_results=[candidate(to="You@Example.com")])
         res = send_newsletter(html_body=HTML, subject=SUBJECT,
                               recipient=RECIPIENT, run_id=RUN_ID, gmail=g)
         self.assertEqual(res.status, "already_sent")
 
     def test_to_display_name_form(self):
-        g = MockGmail(search_results=[candidate(to="Chris Rey <chris.rey001@gmail.com>")])
+        g = MockGmail(search_results=[candidate(to="Jordan Smith <you@example.com>")])
         res = send_newsletter(html_body=HTML, subject=SUBJECT,
                               recipient=RECIPIENT, run_id=RUN_ID, gmail=g)
         self.assertEqual(res.status, "already_sent")
@@ -298,11 +298,11 @@ class TestMatchingHelpers(unittest.TestCase):
         self.assertIsNone(_parse_date_header(None))
 
     def test_to_matches(self):
-        self.assertTrue(_to_matches("chris.rey001@gmail.com", RECIPIENT))
-        self.assertTrue(_to_matches("Chris.Rey001@GMAIL.com", RECIPIENT))
-        self.assertTrue(_to_matches("Chris <chris.rey001@gmail.com>, x@y.z",
+        self.assertTrue(_to_matches("you@example.com", RECIPIENT))
+        self.assertTrue(_to_matches("YOU@EXAMPLE.COM", RECIPIENT))
+        self.assertTrue(_to_matches("Jordan <you@example.com>, x@y.z",
                                     RECIPIENT))
-        self.assertFalse(_to_matches("kndufour@gmail.com", RECIPIENT))
+        self.assertFalse(_to_matches("partner@example.com", RECIPIENT))
         self.assertFalse(_to_matches("", RECIPIENT))
 
     def test_sent_query_binds_single_day(self):
@@ -433,12 +433,12 @@ class TestNotesNeverLeakSentWord(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Sender display identity ("Kiwi" for the newsletter only; the shared K3
+# Sender display identity ("Kiwi" for the newsletter only; the shared agent
 # alias keeps its own display name for other workflows).
 
 
 class TestSenderIdentity(unittest.TestCase):
-    SENDER = "Kiwi <chris.rey001@gmail.com>"
+    SENDER = "Kiwi <you@example.com>"
 
     def _mock_verified(self, send_id):
         g = MockGmail(send_id=send_id)
@@ -506,45 +506,45 @@ if __name__ == "__main__":
 
 
 # ---------------------------------------------------------------------------
-# Multi-recipient policy (Tasklet canceled 2026-09-26; K3 is the sole sender:
-# ONE message to Chris + Kristen). Idempotency and post-send verification
+# Multi-recipient policy (legacy sender retired 2026-09-26; single sender:
+# ONE message to both recipients). Idempotency and post-send verification
 # must require EVERY address present in the To header, never just one.
 
 
 class TestMultiRecipient(unittest.TestCase):
-    BOTH = "chris.rey001@gmail.com, kndufour@gmail.com"
+    BOTH = "you@example.com, partner@example.com"
 
     def test_to_matches_both_present(self):
         self.assertTrue(
-            _to_matches("chris.rey001@gmail.com, kndufour@gmail.com",
+            _to_matches("you@example.com, partner@example.com",
                         self.BOTH))
 
     def test_to_matches_order_insensitive(self):
         self.assertTrue(
-            _to_matches("kndufour@gmail.com, chris.rey001@gmail.com",
+            _to_matches("partner@example.com, you@example.com",
                         self.BOTH))
 
     def test_to_matches_display_name_forms(self):
         self.assertTrue(
             _to_matches(
-                "Chris Rey <chris.rey001@gmail.com>, "
-                "Kristen <kndufour@gmail.com>", self.BOTH))
+                "Jordan Smith <you@example.com>, "
+                "Casey <partner@example.com>", self.BOTH))
 
     def test_to_matches_case_insensitive(self):
         self.assertTrue(
-            _to_matches("CHRIS.REY001@GMAIL.COM, KnDufour@Gmail.com",
+            _to_matches("YOU@EXAMPLE.COM, Partner@Example.com",
                         self.BOTH))
 
     def test_to_matches_partial_is_false(self):
-        # A message to Chris ONLY must NOT count as this week's
-        # both-recipients send -- otherwise the gate could skip Kristen.
-        self.assertFalse(_to_matches("chris.rey001@gmail.com", self.BOTH))
+        # A message to Jordan ONLY must NOT count as this week's
+        # both-recipients send -- otherwise the gate could skip Casey.
+        self.assertFalse(_to_matches("you@example.com", self.BOTH))
 
     def test_to_matches_empty_recipient_is_false(self):
-        self.assertFalse(_to_matches("chris.rey001@gmail.com", ""))
+        self.assertFalse(_to_matches("you@example.com", ""))
 
     def test_is_same_send_requires_both(self):
-        both_cand = candidate(to="kndufour@gmail.com, chris.rey001@gmail.com")
+        both_cand = candidate(to="partner@example.com, you@example.com")
         self.assertTrue(
             _is_same_send(both_cand, subject=SUBJECT,
                           recipient=self.BOTH, today=_today_denver()))
@@ -555,7 +555,7 @@ class TestMultiRecipient(unittest.TestCase):
 
     def test_is_verified_send_requires_both(self):
         both_cand = candidate(cid="msg_new1",
-                              to="chris.rey001@gmail.com, kndufour@gmail.com")
+                              to="you@example.com, partner@example.com")
         self.assertTrue(
             _is_verified_send(both_cand, message_id="msg_new1",
                               recipient=self.BOTH, today=_today_denver()))
@@ -588,13 +588,13 @@ class TestMultiRecipient(unittest.TestCase):
         self.assertEqual(res.status, "sent")
         self.assertEqual(res.message_id, "msg_new2")
         # one message, both addresses in --to
-        self.assertIn("chris.rey001@gmail.com", sent_to["to"])
-        self.assertIn("kndufour@gmail.com", sent_to["to"])
+        self.assertIn("you@example.com", sent_to["to"])
+        self.assertIn("partner@example.com", sent_to["to"])
 
     def test_both_recipients_duplicate_blocks_retry(self):
         BothMock_results = [
             candidate(cid="msg_old",
-                      to="kndufour@gmail.com, chris.rey001@gmail.com")]
+                      to="partner@example.com, you@example.com")]
 
         class DupMock:
             send_calls = 0
@@ -614,7 +614,7 @@ class TestMultiRecipient(unittest.TestCase):
         self.assertEqual(DupMock.send_calls, 0)
 
     def test_chris_only_message_does_not_block_both_send(self):
-        # Last week's Chris-only sends must not suppress the new
+        # Last week's Jordan-only sends must not suppress the new
         # both-recipients send.
         class NoDupMock:
             send_calls = 0

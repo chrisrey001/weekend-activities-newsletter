@@ -51,6 +51,14 @@ Gmail/Calendar access stays in your agent's credential store. `config.yaml`
 is git-ignored — never commit it. If you fork this repo, your private config
 stays on your machine.
 
+**Newer config knobs** (see `config.example.yaml`):
+
+| Key | What it does |
+|---|---|
+| `newsletter.public_edition` | `true`: neutral copy, no internal footer links, adds `Reply STOP to unsubscribe.` Use for any audience beyond your household. |
+| `features.calendar_integration` | `false`: any `--calendar-json` is ignored — no conflict flags, no calendar notes. Keep `false` unless the recipients are your own household. |
+| `newsletter.dashboard_url` / `newsletter.dashboard_label` | Optional footer link (private editions only) to your metrics dashboard. Leave blank for no link. |
+
 ## Step 2 — Run the research brief
 
 ```bash

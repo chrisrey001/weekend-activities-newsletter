@@ -13,12 +13,22 @@ newsletter:
   name: "Maple Street Weekend"        # newsletter title, research brief header
   footer_brand: "Maple Street Weekend Guide"   # email footer + subject line
   target_events: 50                   # target verified events per edition
+  public_edition: false               # true: no internal footer links, adds
+                                      #   "Reply STOP to unsubscribe."
+  dashboard_url: ""                   # optional: private-edition footer link
+  dashboard_label: "Command Center"   #   (e.g. your metrics dashboard)
 
 family:
   members: ["Jordan", "Casey", "Riley"]  # footer: "curated for Jordan, Casey & Riley"
   kid_name: "Riley"                   # young child to flag events for (null if none)
   kid_age_years: 2
   kid_friendly_label: "Riley-approved"   # badge on kid-suitable events
+
+features:
+  calendar_integration: false         # true: the Thursday worker fetches this
+                                      #   profile's Google Calendar and passes
+                                      #   --calendar-json. Keep false unless the
+                                      #   recipients are your own household.
 
 location:
   timezone: "America/Chicago"         # IANA timezone: send dates, cron, "today"

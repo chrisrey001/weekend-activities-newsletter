@@ -21,6 +21,7 @@ DEFAULTS = {
         "name": "Weekend Guide",
         "footer_brand": "Weekend Guide",
         "target_events": 50,
+        "public_edition": False,
     },
     "family": {
         "members": [],
@@ -44,6 +45,13 @@ DEFAULTS = {
         "layer3": [],
     },
     "categories": ["family-friendly", "date-night", "cant-miss"],
+    "features": {
+        # Per-profile feature flags. calendar_integration=True means the
+        # Thursday worker fetches this profile's Google Calendar and passes
+        # --calendar-json; False (default) means no calendar is ever read for
+        # this profile, even if a --calendar-json path is supplied.
+        "calendar_integration": False,
+    },
 }
 
 
@@ -69,6 +77,11 @@ def load_config(path):
     cfg = _deep_merge(DEFAULTS, user)
     for section, key in REQUIRED:
         if not cfg.get(section, {}).get(key):
+            # Public editions take recipients per-run via --recipient, so an
+            # empty recipients list is legal in their config file.
+            if ((section, key) == ("email", "recipients")
+                    and cfg["newsletter"].get("public_edition")):
+                continue
             raise ValueError(
                 f"config {path}: [{section}] {key} is required.")
     try:
@@ -81,7 +94,7 @@ def load_config(path):
 
 
 def family_label(cfg):
-    """'Chris, Kristen & Ava' style label from the members list."""
+    """'Jordan, Casey & Riley' style label from the members list."""
     members = cfg["family"]["members"]
     if not members:
         return "the family"
@@ -103,4 +116,7 @@ def theme_from_config(cfg):
         "home_label": cfg["location"]["home_area"],
         "kid_field": "kid_friendly",
         "kid_label": kid_label,
+        "public_edition": cfg["newsletter"].get("public_edition", False),
+        "dashboard_url": cfg["newsletter"].get("dashboard_url"),
+        "dashboard_label": cfg["newsletter"].get("dashboard_label", "Command Center"),
     }

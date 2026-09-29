@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kiwi's Corner -- the single parameterized pipeline entrypoint.
+"""Kiwi's Weekend Guide -- the single parameterized pipeline entrypoint.
 
 One cron job, one script, no date-suffixed anything. The worker (an agent)
 runs research first (see the research brief below), then invokes the
@@ -14,7 +14,7 @@ deterministic stages:
                    --picks-json runs/2026-09-17/picks.json \\
                    --calendar-json runs/2026-09-17/calendar.json \\
                    --weather-json runs/2026-09-17/weather.json \\
-                   [--recipient chris.rey001@gmail.com] [--dry-run]
+                   [--recipient you@example.com] [--dry-run]
 
 Stages: weekend dates -> verify (verify.py, deterministic) -> enrich
 (calendar_context + weather hook) -> render (template.py) -> pre-flight
@@ -52,6 +52,7 @@ DENVER = ZoneInfo("America/Denver")
 
 sys.path.insert(0, str(HERE))
 from config import load_config, theme_from_config
+import source_scorecard
 
 EVENT_FLOOR = 40  # settled requirement: ~40-65 verified Fri-Sun events
 
@@ -115,6 +116,11 @@ def research_brief_text(run_date, weekend, cfg):
                       "young children.")
         kid_header = "kid-friendly standouts"
 
+    # Source health from prior runs (scorecard index). Absent on a fresh
+    # install -- the brief simply omits the section until runs exist.
+    source_health_section = source_scorecard.brief_section(
+        source_scorecard.load(RUNS_DIR / source_scorecard.INDEX_NAME))
+
     return f"""# {nl['name']} -- Research Brief
 Run date: {run_date.isoformat()} ({run_weekday}) · Weekend: {fri_l} - {sun_l}
 Weekend dates: {fri} (Fri), {sat} (Sat), {sun} (Sun)
@@ -141,6 +147,7 @@ Broad searches ({layer3}), then targeted follow-ups on big-ticket items
 (major concerts, festivals) to pin down exact dates, times, prices, and
 event-specific URLs.
 
+{source_health_section}
 ## Date-verification rule (NON-NEGOTIABLE)
 Born from a real wrong-date incident. Every event's date must be verified
 against an explicit, current listing before it enters events.json:
@@ -191,7 +198,11 @@ Write runs/{run_date.isoformat()}/events.json:
   "events": [ ...records above... ],
   "dropped": ["<name> (<date>, <layer>) -- <reason>", ...],
   "sources_ok": ["layer1:<a source>", ...],
-  "sources_failed": ["layer1:<a source>", ...]
+  "sources_failed": ["layer1:<a source>", ...],
+  "source_proposals": [{{"replaces": "<stale source>", "candidate": "<name>",
+    "url": "<verified url>", "why": "<one line>"}}]  -- optional; fill it
+    when the brief's Replacement hunt names stale sources. Only propose
+    sources you verified carry current content.
 }}
 Target: {target} verified events (floor 40 -- the pipeline halts below it).
 
@@ -226,14 +237,23 @@ def stage_verify(events_json, weekend, out_lines):
     return proc.stdout
 
 
-def stage_enrich(events, weekend, calendar_json, weather_json, out_lines):
-    """Calendar tiers + weather facts; annotate hard time overlaps."""
+def stage_enrich(events, weekend, calendar_json, weather_json, out_lines,
+               calendar_enabled=True):
+    """Calendar tiers + weather facts; annotate hard time overlaps.
+
+    calendar_enabled=False (per-profile feature flag) means no calendar is
+    read for this profile even if a --calendar-json path was supplied.
+    """
     sys.path.insert(0, str(HERE))
     import calendar_context
     import weather_hook
 
     ctx = {"hard_conflicts": [], "context_notes": [],
            "informational": [], "note": "calendar not provided"}
+    if calendar_json and not calendar_enabled:
+        out_lines.append("calendar: profile has calendar_integration=false; "
+                         "--calendar-json ignored, no conflict flags applied")
+        calendar_json = None
     if calendar_json:
         raw = json.loads(Path(calendar_json).read_text())
         cal_events = raw["events"] if isinstance(raw, dict) else raw
@@ -501,6 +521,7 @@ def build_run_log(*, run_date, weekend, recipient, dry_run, run_id, events,
     ok_list = data.get("sources_ok") or []
     fail_list = data.get("sources_failed") or []
     dropped = data.get("dropped") or []
+    proposals = source_scorecard.format_proposals(data.get("source_proposals"))
 
     st = send_result.status
     if st == "sent":
@@ -550,6 +571,8 @@ def build_run_log(*, run_date, weekend, recipient, dry_run, run_id, events,
 - Sources failed: {len(fail_list)} -- {", ".join(fail_list) if fail_list else "none"}
 - Dropped events: {len(dropped)}
 {chr(10).join("- " + d for d in dropped) if dropped else ""}
+- Replacement proposals: {len(proposals)}
+{chr(10).join("- " + p for p in proposals) if proposals else ""}
 
 ## Calendar context
 - {calendar_note}
@@ -595,7 +618,7 @@ def subject_for_log(weekend):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="Kiwi's Corner pipeline: research brief or full "
+        description="Kiwi's Weekend Guide pipeline: research brief or full "
                     "deterministic run (verify -> enrich -> render -> "
                     "pre-flight -> send -> log).")
     ap.add_argument("--events-json",
@@ -686,13 +709,38 @@ def main(argv=None):
     # ---- deterministic verify gate
     verify_out = stage_verify(args.events_json, weekend, out_lines)
 
+    # ---- source scorecard: rebuild the cross-run index (sources + featured
+    # events) from runs/*/events.json and flag stale sources. Advisory only:
+    # it never halts the pipeline, but a failure is recorded loudly.
+    try:
+        _index = source_scorecard.rebuild(RUNS_DIR)
+        source_scorecard.save(_index, RUNS_DIR / source_scorecard.INDEX_NAME)
+        out_lines.append(
+            f"scorecard: indexed {len(_index['sources'])} sources, "
+            f"{len(_index['featured'])} featured events")
+        for _stale in source_scorecard.stale_sources(_index):
+            out_lines.append(
+                f"scorecard STALE: {_stale['name']} ({_stale['layer']}) -- "
+                f"{_stale['streak_failed']} consecutive failed runs "
+                f"(last seen {_stale['last_seen']})")
+    except Exception as exc:  # noqa: BLE001 -- advisory, must not kill a run
+        out_lines.append(f"scorecard: SKIPPED ({type(exc).__name__}: {exc})")
+
+    # ---- replacement proposals: agent-suggested substitutes for stale
+    # sources (see the brief's Replacement hunt). Advisory; malformed
+    # entries are skipped, never fatal.
+    for _line in source_scorecard.format_proposals(
+            data.get("source_proposals")):
+        out_lines.append(f"scorecard PROPOSAL: {_line}")
+
     # ---- enrich
     if not args.header_html:
         raise PipelineHalt("--header-html is required: the newsletter must "
                             "carry a bespoke, written-fresh header every "
                             "week.")
     day_notes, weather, cal = stage_enrich(
-        events, weekend, args.calendar_json, args.weather_json, out_lines)
+        events, weekend, args.calendar_json, args.weather_json, out_lines,
+        calendar_enabled=cfg["features"].get("calendar_integration", False))
 
     # ---- render
     html_doc, subject = stage_render(

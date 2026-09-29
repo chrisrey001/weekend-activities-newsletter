@@ -86,6 +86,40 @@ class TestBriefMode(unittest.TestCase):
                 text = (Path(td) / "research-brief.md").read_text()
                 self.assertIn(f"Run date: {run_date} ({weekday})", text)
 
+    def _brief_with_runs_dir(self, td, runs_dir):
+        with patch.object(run, "RUNS_DIR", Path(runs_dir)):
+            rc = run.main(["--run-date", "2026-09-17", "--run-dir", td,
+                           "--config", str(Path(__file__).parent /
+                                           "fixtures" / "test-config.yaml")])
+        self.assertEqual(rc, 0)
+        return (Path(td) / "research-brief.md").read_text()
+
+    def test_brief_includes_source_health_when_index_exists(self):
+        with tempfile.TemporaryDirectory() as td, \
+                tempfile.TemporaryDirectory() as rd:
+            (Path(rd) / "index.json").write_text(json.dumps({
+                "version": 1, "updated": "2026-09-29T00:00:00+00:00",
+                "sources": [{
+                    "_id": "steady.com", "layer": "layer1", "name": "steady.com",
+                    "ok": 3, "partial": 0, "failed": 0, "runs_seen": 3,
+                    "first_seen": "2026-09-11", "last_seen": "2026-09-24",
+                    "last_ok": "2026-09-24", "last_status": "ok",
+                    "streak_failed": 0, "layers": ["layer1"]}],
+                "featured": [],
+            }))
+            text = self._brief_with_runs_dir(td, rd)
+            self.assertIn("## Source health (from prior runs)", text)
+            self.assertIn("steady.com", text)
+
+    def test_brief_omits_source_health_without_index(self):
+        # Fresh install: no runs/index.json yet -> no health section, and
+        # the brief must still render (no crash on missing index).
+        with tempfile.TemporaryDirectory() as td, \
+                tempfile.TemporaryDirectory() as rd:
+            text = self._brief_with_runs_dir(td, rd)
+            self.assertNotIn("## Source health", text)
+            self.assertIn("## Date-verification rule", text)
+
 
 class TestVerifyGate(unittest.TestCase):
     def test_verify_failure_halts(self):
@@ -213,8 +247,8 @@ class TestSendContract(unittest.TestCase):
         sys.modules["send_hardened"] = SimpleNamespace(
             SendResult=SendResult, send_newsletter=fake_send)
         run.stage_send("<html>", "subj", "r@x.com", "rid", True, [],
-                       sender="Kiwi <chris.rey001@gmail.com>")
-        self.assertEqual(seen["sender"], "Kiwi <chris.rey001@gmail.com>")
+                       sender="Kiwi <you@example.com>")
+        self.assertEqual(seen["sender"], "Kiwi <you@example.com>")
 
 
 class TestLogIntegrity(unittest.TestCase):
@@ -226,8 +260,8 @@ class TestLogIntegrity(unittest.TestCase):
         return run.build_run_log(
             run_date=__import__("datetime").date(2026, 9, 17),
             weekend=["2026-09-18", "2026-09-19", "2026-09-20"],
-            recipient="chris.rey001@gmail.com", dry_run=(status == "dry_run"),
-            run_id="2026-09-17::chris.rey001@gmail.com", events=[ev],
+            recipient="you@example.com", dry_run=(status == "dry_run"),
+            run_id="2026-09-17::you@example.com", events=[ev],
             data={"sources_ok": [], "sources_failed": [], "dropped": []},
             verify_out="events: 1, failed checks: 0, warnings: 0",
             calendar_note="calendar not provided",
@@ -249,6 +283,62 @@ class TestLogIntegrity(unittest.TestCase):
         self.assertIn("`failed`", log)
         self.assertIn("notes here", log)  # verbatim notes
 
+    def test_log_includes_replacement_proposals(self):
+        ev = {"name": "Good Event", "date": "2026-09-19", "price": "$10"}
+        log = run.build_run_log(
+            run_date=__import__("datetime").date(2026, 9, 17),
+            weekend=["2026-09-18", "2026-09-19", "2026-09-20"],
+            recipient="you@example.com", dry_run=True,
+            run_id="2026-09-17::you@example.com", events=[ev],
+            data={"sources_ok": [], "sources_failed": [],
+                  "dropped": [],
+                  "source_proposals": [
+                      {"replaces": "dead.com", "candidate": "New Weekly",
+                       "url": "https://new.example.com",
+                       "why": "current weekend roundup"}]},
+            verify_out="events: 1, failed checks: 0, warnings: 0",
+            calendar_note="calendar not provided",
+            weather={"note": "", "status": "not_provided", "rain_days": []},
+            preflight={"urls_checked": 1, "bot403_accepted": 0},
+            send_result=SimpleNamespace(status="dry_run", message_id=None,
+                                        notes="dry run"))
+        self.assertIn("Replacement proposals: 1", log)
+        self.assertIn("New Weekly (https://new.example.com) replaces dead.com",
+                      log)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCalendarFeatureFlag(unittest.TestCase):
+    """features.calendar_integration=false must ignore --calendar-json."""
+
+    def _cal_json(self):
+        import json
+        import tempfile
+        cal = {"events": [
+            {"title": "Busy morning", "start": "2026-10-03T10:00:00",
+             "end": "2026-10-03T12:00:00", "description": ""}]}
+        p = Path(tempfile.mkdtemp()) / "cal.json"
+        p.write_text(json.dumps(cal))
+        return str(p)
+
+    def _run_enrich(self, enabled):
+        ev = {"name": "E", "date": "2026-10-03", "start_time": "11:00 AM",
+              "price": "$5"}
+        out = []
+        day_notes, weather, ctx = run.stage_enrich(
+            [ev], ["2026-10-02", "2026-10-03", "2026-10-04"],
+            self._cal_json(), None, out, calendar_enabled=enabled)
+        return ev, out, ctx
+
+    def test_flag_off_ignores_calendar(self):
+        ev, out, ctx = self._run_enrich(False)
+        self.assertEqual(ctx["note"], "calendar not provided")
+        self.assertNotIn("conflict", ev)
+        self.assertTrue(any("calendar_integration=false" in l for l in out))
+
+    def test_flag_on_applies_calendar(self):
+        ev, out, ctx = self._run_enrich(True)
+        self.assertIn("conflict", ev)

@@ -2,7 +2,7 @@
 
 ## Where this stands
 
-Kiwi's Corner is a proven, single-family system: one agent, one Gmail
+Kiwi's Weekend Guide is a proven, single-family system: one agent, one Gmail
 account, one cron schedule, one Thursday email. It works because every hard
 part is deterministic — verification gates, send integrity, idempotency —
 while the genuinely agentic part (researching what's on this weekend) stays
