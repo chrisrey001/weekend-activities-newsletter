@@ -243,6 +243,20 @@ class TestDarkBrandTokens(unittest.TestCase):
     def test_email_fonts(self):
         self.assertIn("Fredoka", self.doc)
         self.assertIn("Nunito", self.doc)
+        # the design's exact Google Fonts URL, so clients with webfont
+        # support render the real fonts
+        self.assertIn("fonts.googleapis.com/css2?family=Fredoka", self.doc)
+        # rounded fallback for Apple platforms (very close to Fredoka)
+        self.assertIn("Arial Rounded MT Bold", self.doc)
+
+    def test_event_card_two_column_layout(self):
+        # matches the design's .event grid: 150px .when column + content
+        self.assertIn('width="150"', self.doc)
+        self.assertIn('role="presentation"', self.doc)
+
+    def test_sun_highlight_used(self):
+        # the design's signature yellow marker (--sun) behind a key word
+        self.assertIn("#FFC94A", self.doc)
 
     def test_header_not_nested_paragraphs(self):
         # header_html is inserted verbatim in the lede block, not wrapped

@@ -94,8 +94,14 @@ PALETTE = {
     "berry_soft": "#362640",
     "tomato_soft": "#45281F",
 }
-FONT_HEADING = "'Fredoka', 'Trebuchet MS', Arial, sans-serif"
+FONT_HEADING = ("'Fredoka', 'Arial Rounded MT Bold', 'Trebuchet MS', "
+                "Arial, sans-serif")
 FONT_BODY = "'Nunito', 'Segoe UI', Arial, sans-serif"
+# The design's exact Google Fonts URL. Email clients with webfont support
+# (Apple Mail, iOS Mail) render the real Fredoka/Nunito; everyone else
+# falls back to Arial Rounded MT Bold (macOS/iOS, very close to Fredoka).
+FONTS_URL = ("https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700"
+             "&family=Nunito:wght@400;600;700;800&display=swap")
 
 # Category pills, from the design's .tag.fam / .tag.date / .tag.must.
 TAG_PILL = {
@@ -248,33 +254,45 @@ def _area_short(e):
 
 
 def event_card(e, context_notes_html="", theme=None):
-    """One event card, matching the design's .event (sample edition)."""
+    """One event card, matching the design's .event (sample edition).
+
+    Two-column table: the .when cell (150px, like the design's
+    grid-template-columns: 150px 1fr) holds the time; the content cell
+    holds the title, tag/venue/price meta line, and description.
+    """
     theme = _resolve_theme(theme)
     require_price(e)  # hard FAIL before any rendering
     tags = _tags_html(e)
     drive = esc(e.get("drive_time_from_home")
                 or e.get("drive_time_from_englewood") or "")
     return (
-        f'<div style="padding: 16px; border-radius: 16px; '
+        f'<table role="presentation" width="100%" cellpadding="0" '
+        f'cellspacing="0" style="padding: 16px; border-radius: 16px; '
         f'border: 2px solid {PALETTE["line"]}; '
         f'background: {PALETTE["bg"]}; margin-bottom: 12px;">'
-        f'<p style="margin: 0 0 6px; color: {PALETTE["muted"]}; '
-        f'font-weight: 800; font-size: 14px;">'
+        f"<tr>"
+        f'<td width="150" valign="top" '
+        f'style="width: 150px; vertical-align: top; padding-right: 12px;">'
+        f'<p style="margin: 0; color: {PALETTE["muted"]}; '
+        f'font-weight: 800; font-size: 14px; font-family: {FONT_BODY};">'
         f'{esc(e.get("start_time") or "See listing")}</p>'
+        f"</td>"
+        f'<td valign="top" style="vertical-align: top;">'
         f'<h3 style="margin: 0 0 8px; font-family: {FONT_HEADING}; '
         f'font-size: 20px; font-weight: 600; color: {PALETTE["ink"]};">'
         f'<a href="{esc(e["url"])}" style="color: {PALETTE["ink"]}; '
         f'text-decoration: none;">{esc(e["name"])}</a>'
         f"{_kid_html(e, theme)}</h3>"
         f'<p style="margin: 0; font-size: 14px; font-weight: 700; '
-        f'color: {PALETTE["muted"]};">'
+        f'color: {PALETTE["muted"]}; font-family: {FONT_BODY};">'
         f"{tags} "
         f'\U0001F4CD {esc(e["venue"])}, {esc(_area_short(e))} ({drive}) '
         f"&nbsp;\U0001F4B0 {price_html(e['price'])}</p>"
         f"{_conflict_html(e)}{context_notes_html}"
         f'<p style="margin: 8px 0 0; color: {PALETTE["muted"]}; '
-        f'font-size: 13px;">{esc(e.get("description") or "")}</p>'
-        "</div>"
+        f'font-size: 13px; font-family: {FONT_BODY};">'
+        f'{esc(e.get("description") or "")}</p>'
+        f"</td></tr></table>"
     )
 
 
@@ -288,26 +306,33 @@ def _all_weekend_card(name, recs, theme=None):
     drive = esc(s.get("drive_time_from_home")
                 or s.get("drive_time_from_englewood") or "")
     return (
-        f'<div style="padding: 16px; border-radius: 16px; '
+        f'<table role="presentation" width="100%" cellpadding="0" '
+        f'cellspacing="0" style="padding: 16px; border-radius: 16px; '
         f'border: 2px solid {PALETTE["line"]}; '
         f'background: {PALETTE["bg"]}; margin-bottom: 12px;">'
-        f'<p style="margin: 0 0 6px; color: {PALETTE["muted"]}; '
-        f'font-weight: 800; font-size: 14px;">'
+        f"<tr>"
+        f'<td width="150" valign="top" '
+        f'style="width: 150px; vertical-align: top; padding-right: 12px;">'
+        f'<p style="margin: 0; color: {PALETTE["muted"]}; '
+        f'font-weight: 800; font-size: 14px; font-family: {FONT_BODY};">'
         f'{esc(", ".join(day_names))}</p>'
+        f"</td>"
+        f'<td valign="top" style="vertical-align: top;">'
         f'<h3 style="margin: 0 0 8px; font-family: {FONT_HEADING}; '
         f'font-size: 20px; font-weight: 600; color: {PALETTE["ink"]};">'
         f'<a href="{esc(s["url"])}" style="color: {PALETTE["ink"]}; '
         f'text-decoration: none;">{esc(s["name"])}</a>'
         f"{_kid_html(s, theme)}</h3>"
         f'<p style="margin: 0; font-size: 14px; font-weight: 700; '
-        f'color: {PALETTE["muted"]};">'
+        f'color: {PALETTE["muted"]}; font-family: {FONT_BODY};">'
         f"{tags} "
         f'\U0001F4CD {esc(s["venue"])} ({drive}) '
         f"&nbsp;\U0001F4B0 {price_html(s['price'])}</p>"
         f"{_conflict_html(s)}"
         f'<p style="margin: 8px 0 0; color: {PALETTE["muted"]}; '
-        f'font-size: 13px;">{esc(s.get("description") or "")}</p>'
-        "</div>"
+        f'font-size: 13px; font-family: {FONT_BODY};">'
+        f'{esc(s.get("description") or "")}</p>'
+        f"</td></tr></table>"
     )
 
 
@@ -414,6 +439,11 @@ def render_newsletter(events, weekend, header_html, picks=None,
 <html>
 <head><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="{FONTS_URL}" rel="stylesheet">
+<style>
+@import url('{FONTS_URL}');
+</style>
 </head>
 <body style="margin: 0; padding: 0; background-color: {PALETTE["bg"]};">
 <div style="font-family: {FONT_BODY}; max-width: 700px; margin: 0 auto; color: {PALETTE["ink"]}; background-color: {PALETTE["bg"]}; padding: 18px 8px; font-size: 17px; line-height: 1.6;">
@@ -437,7 +467,7 @@ def render_newsletter(events, weekend, header_html, picks=None,
 {weather_html}
 
 <h2 style="font-family:{FONT_HEADING};color:{PALETTE["ink"]};font-size:24px;font-weight:700;margin:26px 0 12px;">
-  \u2B50 Can't-miss picks
+  \u2B50 Can't-miss <span style="background-color:{PALETTE["sun"]};color:{PALETTE["cta_ink"]};border-radius:8px;padding:2px 10px;">picks</span>
 </h2>
 {picks_html}
 
