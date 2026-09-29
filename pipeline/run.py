@@ -49,6 +49,10 @@ VERIFY_PY = PROJECT / "verify.py"
 RUNS_DIR = PROJECT / "runs"
 DENVER = ZoneInfo("America/Denver")
 
+
+sys.path.insert(0, str(HERE))
+from config import load_config, theme_from_config
+
 EVENT_FLOOR = 40  # settled requirement: ~40-65 verified Fri-Sun events
 
 # 403s are accepted ONLY from these hosts (known bot-protection), and only
@@ -78,39 +82,64 @@ def compute_weekend(run_date):
 
 # ---------------------------------------------------------- research brief
 
-def research_brief_text(run_date, weekend):
+def research_brief_text(run_date, weekend, cfg):
+    """Research brief, parameterized by the family config.
+
+    All metro/venue/source/family specifics come from cfg (config.yaml);
+    nothing city- or family-specific is hardcoded here.
+    """
     fri, sat, sun = weekend
+    run_weekday = run_date.strftime("%A")
     fri_l = datetime.strptime(fri, "%Y-%m-%d").strftime("%A, %B %-d")
     sun_l = datetime.strptime(sun, "%Y-%m-%d").strftime("%A, %B %-d")
-    return f"""# Kiwi's Corner -- Research Brief
-Run date: {run_date.isoformat()} (Thursday) · Weekend: {fri_l} - {sun_l}
+    nl = cfg["newsletter"]
+    loc = cfg["location"]
+    fam = cfg["family"]
+    src = cfg["sources"]
+    target = nl.get("target_events") or 50
+
+    layer1 = ", ".join(src["layer1"])
+    venues = ", ".join(src["venues"])
+    layer3 = ", ".join(src["layer3"])
+    cat_list = ", ".join(f'"{c}"' for c in cfg["categories"])
+
+    kid = fam.get("kid_name")
+    if kid:
+        age = fam.get("kid_age_years")
+        age_note = f" ({kid} is ~{age})" if age else ""
+        kid_schema = (f"- kid_friendly (bool) -- true for toddler-suitable "
+                      f"events{age_note}.")
+        kid_header = f"{kid}-friendly standouts"
+    else:
+        kid_schema = ("- kid_friendly (bool) -- true for events suitable for "
+                      "young children.")
+        kid_header = "kid-friendly standouts"
+
+    return f"""# {nl['name']} -- Research Brief
+Run date: {run_date.isoformat()} ({run_weekday}) · Weekend: {fri_l} - {sun_l}
 Weekend dates: {fri} (Fri), {sat} (Sat), {sun} (Sun)
 
-You are the research worker for this week's Kiwi's Corner newsletter. The
+You are the research worker for this week's {nl['name']} newsletter. The
 downstream pipeline (verify -> render -> send) is fully deterministic; your
 job is to produce a correct, complete `events.json`. Follow the 3-layer
 method and the non-negotiable date-verification rule exactly.
 
-## Layer 1 -- 11 general sources
-Sweep each source's Denver weekend coverage for the {fri}-{sun} window:
-5280.com, denver7.com (weekend roundup), westword.com, milehighonthecheap.com,
-303magazine.com, eventbrite.com (Denver), allevents.in (Denver), visitdenver.org,
-axs.com (Denver), ticketmaster.com (Denver), downtowndenver.com.
-Keep Chris's established source list; expand only where the data shows a
+## Layer 1 -- general sources
+Sweep each source's {loc['metro']} weekend coverage for the {fri}-{sun} window:
+{layer1}.
+Keep the established source list; expand only where the data shows a
 real gap. Log per-source health: ok / partial / failed + one-line note.
 
 ## Layer 2 -- venue sweep
-Check the direct calendars of the established venue list (18 venues per the
-PLAN; the 2026-09-17 run swept 30: Red Rocks, Ball Arena, Mission Ballroom,
-Ogden Theatre, Bluebird Theater, Fillmore Auditorium, and the rest of the
-compiled list). Record per-venue health (ok / partial / failed + note);
+Check the direct calendars of the established venue list:
+{venues}.
+Record per-venue health (ok / partial / failed + note);
 document every stale/cancelled/duplicate drop with its reason.
 
 ## Layer 3 -- broad searches + big-ticket follow-ups
-14 broad searches (sports: Avalanche/Rapids/Mammoth/Nuggets schedules,
-concerts, festivals, free events, family events, date-night options), then
-targeted follow-ups on big-ticket items (major concerts, festivals) to pin
-down exact dates, times, prices, and event-specific URLs.
+Broad searches ({layer3}), then targeted follow-ups on big-ticket items
+(major concerts, festivals) to pin down exact dates, times, prices, and
+event-specific URLs.
 
 ## Date-verification rule (NON-NEGOTIABLE)
 Born from a real wrong-date incident. Every event's date must be verified
@@ -134,7 +163,7 @@ Each event is a JSON object with:
 - date ("YYYY-MM-DD", required) -- must fall within {fri}..{sun}.
 - date_end ("YYYY-MM-DD", optional) -- multi-day events only.
 - venue (str, required) -- venue or neighborhood name.
-- address_or_area (str) -- street/area, e.g. "Larimer Street, downtown Denver".
+- address_or_area (str) -- street/area, e.g. "Larimer Street, downtown {loc['metro']}".
 - start_time (str, e.g. "7:30 PM"; null -> rendered as "See listing").
 - url (str, required) -- the EVENT-SPECIFIC page (never a generic discover
   page). Verified accurate: pre-flight curls every unique URL.
@@ -142,9 +171,9 @@ Each event is a JSON object with:
   Use "Free" for free events. If no price can be confirmed, DROP the event
   and record it in `dropped` with the reason.
 - description (str) -- one line, factual.
-- tags ([]) -- subset of ["family-friendly", "date-night", "cant-miss"].
-- ava_friendly (bool) -- true for toddler-suitable events (Ava is ~2).
-- drive_time_from_englewood (str, e.g. "~25 min").
+- tags ([]) -- subset of [{cat_list}].
+{kid_schema}
+- drive_time_from_home (str, e.g. "~25 min") -- driving time from {loc['home_area']}.
 - recurring (bool, required) -- true for markets/festivals/series.
 - stated_weekday (str, required when recurring) -- the weekday the SOURCE
   claims, e.g. "Saturday". The verifier fails the event if the assigned
@@ -161,18 +190,18 @@ Write runs/{run_date.isoformat()}/events.json:
   "generated": "<ISO timestamp>",
   "events": [ ...records above... ],
   "dropped": ["<name> (<date>, <layer>) -- <reason>", ...],
-  "sources_ok": ["layer1:5280.com", ...],
-  "sources_failed": ["layer1:westword.com", ...]
+  "sources_ok": ["layer1:<a source>", ...],
+  "sources_failed": ["layer1:<a source>", ...]
 }}
-Target: 40-65 verified events (floor 40 -- the pipeline halts below it).
+Target: {target} verified events (floor 40 -- the pipeline halts below it).
 
 ## Then resume the pipeline
 After events.json is written, run:
-    python3 {HERE}/run.py --events-json runs/{run_date.isoformat()}/events.json \\
-        --header-html <bespoke-header.html> [--picks-json ...] \\
+    python3 {HERE}/run.py --config <your config.yaml> --events-json runs/{run_date.isoformat()}/events.json \
+        --header-html <bespoke-header.html> [--picks-json ...] \
         [--calendar-json ...] [--weather-json ...] [--dry-run]
 The bespoke header paragraph (personalized, written fresh: big tickets,
-weather-driven picks, Ava-friendly standouts, calendar context) and the
+weather-driven picks, {kid_header}, calendar context) and the
 can't-miss picks list are written fresh each week and passed as files.
 """
 
@@ -263,7 +292,7 @@ def _cal_note(c):
 
 
 def stage_render(events, weekend, run_dir, header_html_path, picks_json,
-                 day_notes, weather, out_lines):
+                 day_notes, weather, out_lines, theme):
     """Render email.html via template.py. Missing price = hard FAIL."""
     sys.path.insert(0, str(HERE))
     import template
@@ -276,10 +305,10 @@ def stage_render(events, weekend, run_dir, header_html_path, picks_json,
     doc = template.render_newsletter(
         events, weekend, header_html, picks=picks,
         day_context_notes=day_notes,
-        weather_note=weather.get("note") or "")
+        weather_note=weather.get("note") or "", theme=theme)
     out = run_dir / "email.html"
     out.write_text(doc)
-    subject = template.subject_for(weekend)
+    subject = template.subject_for(weekend, theme)
     out_lines.append(f"render: wrote {out} ({len(doc)} chars)")
     return doc, subject
 
@@ -317,7 +346,7 @@ def _link_ok(url, code):
     return False, f"HTTP {code}"
 
 
-def stage_preflight(events, weekend, html_doc, out_lines):
+def stage_preflight(events, weekend, html_doc, out_lines, theme):
     """Placeholder scan, link check, event floor, footer brand. Any failure
     halts the pipeline."""
     failures = []
@@ -340,18 +369,19 @@ def stage_preflight(events, weekend, html_doc, out_lines):
         out_lines.append("preflight placeholders: none found")
 
     # 3) footer branding (check against the unescaped text: the template
-    # HTML-escapes the brand, so "Kiwi's Weekend Guide" appears as
+    # HTML-escapes the brand, so e.g. "Kiwi's Weekend Guide" appears as
     # "Kiwi&#x27;s Weekend Guide" in the raw HTML)
     sys.path.insert(0, str(HERE))
     import html as _html
     import template as _t
     plain = _html.unescape(html_doc)
-    if _t.FOOTER_BRAND not in plain:
-        failures.append(f"footer brand {_t.FOOTER_BRAND!r} missing")
+    brand = theme["footer_brand"]
+    if brand not in plain:
+        failures.append(f"footer brand {brand!r} missing")
     elif _t.LEGACY_BUG_BRAND in plain:
         failures.append(f"legacy brand bug present: {_t.LEGACY_BUG_BRAND!r}")
     else:
-        out_lines.append(f"preflight footer: {_t.FOOTER_BRAND!r} present")
+        out_lines.append(f"preflight footer: {brand!r} present")
 
     # 4) link check: every unique URL in the final email
     urls = sorted(set(re.findall(r'href="([^"]+)"', html_doc)))
@@ -448,7 +478,7 @@ _SENT_WORD = re.compile(r"(?i)\bsent\b")
 
 def build_run_log(*, run_date, weekend, recipient, dry_run, run_id, events,
                   data, verify_out, calendar_note, weather, preflight,
-                  send_result, sender=None):
+                  send_result, sender=None, theme=None):
     """Build run-log.md.
 
     LOG INTEGRITY RULE (2026-09-17 incident): the standalone word "sent"
@@ -499,9 +529,10 @@ def build_run_log(*, run_date, weekend, recipient, dry_run, run_id, events,
             f"- No email left the mailbox. Send module notes (verbatim):\n"
             f"  {send_result.notes}")
 
-    log = f"""# Kiwi's Corner -- Run Log
+    _theme = theme or {}
+    log = f"""# {_theme.get("newsletter_name", "Weekend Guide")} -- Run Log
 **Run date:** {run_date.isoformat()} · **Weekend:** {fri_l} - {sun_l}
-**Recipient:** {recipient} (K3 sole sender since Tasklet canceled 2026-09-26: ONE message to both)
+**Recipient:** {recipient} (one message to all recipients)
 **Sender:** {sender if sender else "(account default)"}
 **Idempotency key:** {run_id}
 **Mode:** {"DRY RUN (no dispatch)" if dry_run else "PRODUCTION"}
@@ -529,7 +560,7 @@ def build_run_log(*, run_date, weekend, recipient, dry_run, run_id, events,
 
 ## Pre-flight
 - Placeholder scan: PASS (no TODO/XXX/FIXME/lorem/template tokens)
-- Footer brand: "{_t.FOOTER_BRAND}" present
+- Footer brand: "{_theme.get("footer_brand", "")}" present
 - Link check: {preflight["urls_checked"]} unique URLs checked, all resolved; {preflight["bot403_accepted"]} x 403 accepted (known bot-protection hosts, content-verified at research time)
 - Price on every event: PASS
 
@@ -580,17 +611,22 @@ def main(argv=None):
                          "\"description\"}, ...] or {\"events\": [...]}.")
     ap.add_argument("--weather-json",
                     help="Injected weather JSON for the indoor-picks hook.")
-    ap.add_argument("--recipient",
-                    default="chris.rey001@gmail.com, kndufour@gmail.com",
-                    help="Newsletter recipient(s), comma-separated (default: "
-                         "Chris + Kristen, one message -- K3 is the sole "
-                         "sender since Tasklet canceled 2026-09-26).")
-    ap.add_argument("--from-name", default="Kiwi",
+    ap.add_argument("--config", default="config.yaml",
+                    help="Path to config.yaml describing the family, place, "
+                         "and newsletter (default: ./config.yaml). All "
+                         "family-specific values come from here; CLI flags "
+                         "override it.")
+    ap.add_argument("--recipient", default=None,
+                    help="Newsletter recipient(s), comma-separated. "
+                         "Default: email.recipients from the config (one "
+                         "message to all of them).")
+    ap.add_argument("--from-name", default=None,
                     help="Sender display name for the newsletter only "
-                         "(default: Kiwi). Empty string keeps the account "
-                         "default.")
-    ap.add_argument("--from-email", default="chris.rey001@gmail.com",
-                    help="Sender address for the newsletter.")
+                         "(default: email.from_name from the config). Empty "
+                         "string keeps the account default.")
+    ap.add_argument("--from-email", default=None,
+                    help="Sender address for the newsletter (default: "
+                         "email.from_email from the config).")
     ap.add_argument("--dry-run", action="store_true",
                     help="Run everything except the real Gmail dispatch "
                          "(send module invoked in dry-run mode).")
@@ -602,15 +638,27 @@ def main(argv=None):
                          "runs/<run-date>/")
     args = ap.parse_args(argv)
 
+    cfg = load_config(args.config)
+    theme = theme_from_config(cfg)
+    tz = ZoneInfo(cfg["location"]["timezone"])
+    # The send sibling computes "today" from its module timezone; align it.
+    import send_hardened as _sh
+    _sh.configure_timezone(cfg["location"]["timezone"])
+
+    recipient = args.recipient or ", ".join(cfg["email"]["recipients"])
+    from_name = (args.from_name if args.from_name is not None
+                 else cfg["email"]["from_name"])
+    from_email = args.from_email or cfg["email"]["from_email"]
+
     run_date = (datetime.strptime(args.run_date, "%Y-%m-%d").date()
-                if args.run_date else datetime.now(DENVER).date())
+                if args.run_date else datetime.now(tz).date())
     weekend = compute_weekend(run_date)
     run_dir = Path(args.run_dir) if args.run_dir else RUNS_DIR / run_date.isoformat()
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- brief mode: no --events-json -> describe the research job, stop
     if not args.events_json:
-        brief = research_brief_text(run_date, weekend)
+        brief = research_brief_text(run_date, weekend, cfg)
         (run_dir / "research-brief.md").write_text(brief)
         print(brief)
         print(f"\nBrief written to {run_dir / 'research-brief.md'}. "
@@ -618,9 +666,9 @@ def main(argv=None):
               "--events-json.")
         return 0
 
-    out_lines = [f"Kiwi's Corner pipeline run {run_date.isoformat()}",
+    out_lines = [f"{cfg['newsletter']['name']} pipeline run {run_date.isoformat()}",
                  f"weekend: {weekend[0]} .. {weekend[2]}",
-                 f"recipient: {args.recipient}",
+                 f"recipient: {recipient}",
                  f"dry_run: {args.dry_run}"]
 
     # ---- load + floor gate
@@ -649,25 +697,25 @@ def main(argv=None):
     # ---- render
     html_doc, subject = stage_render(
         events, weekend, run_dir, args.header_html, args.picks_json,
-        day_notes, weather, out_lines)
+        day_notes, weather, out_lines, theme)
 
     # ---- pre-flight gates
-    preflight = stage_preflight(events, weekend, html_doc, out_lines)
+    preflight = stage_preflight(events, weekend, html_doc, out_lines, theme)
 
     # ---- send (lazy import; missing/differing module -> ImportError, loud)
-    run_id = f"{run_date.isoformat()}::{args.recipient}"
-    sender = f"{args.from_name} <{args.from_email}>" if args.from_name else None
-    send_result = stage_send(html_doc, subject, args.recipient, run_id,
+    run_id = f"{run_date.isoformat()}::{recipient}"
+    sender = f"{from_name} <{from_email}>" if from_name else None
+    send_result = stage_send(html_doc, subject, recipient, run_id,
                              args.dry_run, out_lines, sender=sender)
 
     # ---- log (integrity-guarded: "sent" only when status == "sent")
     log = build_run_log(
-        run_date=run_date, weekend=weekend, recipient=args.recipient,
+        run_date=run_date, weekend=weekend, recipient=recipient,
         dry_run=args.dry_run, run_id=run_id, events=events, data=data,
         verify_out=verify_out,
         calendar_note=cal.get("note", "calendar not provided"),
         weather=weather, preflight=preflight, send_result=send_result,
-        sender=sender)
+        sender=sender, theme=theme)
     log_path = run_dir / "run-log.md"
     log_path.write_text(log)
     out_lines.append(f"log: wrote {log_path}")

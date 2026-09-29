@@ -8,6 +8,15 @@
 python3 ~/workspace/kiwis-corner/pipeline/run.py [flags]
 ```
 
+**Config first.** Every run needs `--config <path>` pointing at your private
+`config.yaml` (copy `config.example.yaml` → `config.yaml` on first setup —
+see `SETUP.md`). Recipients, sender identity, timezone, metro, home area,
+family names, research sources, venue list, broad-search topics, and event
+categories all come from that file. Nothing family-specific should be typed
+on the command line. `config.yaml` is git-ignored and must never be
+committed; credentials never belong in it either — they live in your
+agent's credential store, not in YAML or Git.
+
 ## 0. Prerequisites
 
 - Python 3 with `verify.py` at `~/workspace/kiwis-corner/verify.py` (deterministic gates).
@@ -27,7 +36,7 @@ python3 ~/workspace/kiwis-corner/pipeline/run.py [flags]
 ### Step 1 — Emit the research brief
 
 ```
-python3 ~/workspace/kiwis-corner/pipeline/run.py [--run-date YYYY-MM-DD]
+python3 ~/workspace/kiwis-corner/pipeline/run.py --config ~/workspace/kiwis-corner/config.yaml [--run-date YYYY-MM-DD]
 ```
 
 With no `--events-json`, run.py prints the research brief to stdout and
@@ -36,17 +45,17 @@ exactly what to research for this week's Fri–Sun.
 
 ### Step 2 — Research (agent-executed, per the brief)
 
-Three layers, from the brief:
+Three layers, from the brief (sources and venues come from your config —
+the brief lists exactly which ones to check):
 
-1. **Layer 1 — 11 general sources** (5280, Denver7 weekend roundup, Westword,
-   Mile High on the Cheap, 303 Magazine, Eventbrite Denver, AllEvents.in,
-   Visit Denver, AXS Denver, Ticketmaster Denver, Downtown Denver). Log each
-   as ok / partial / failed with a one-line note.
-2. **Layer 2 — venue sweep** (the established venue list; 18 per PLAN, 30 in
-   the 9/17 run). Per-venue health + every stale/cancelled/duplicate drop
-   documented with its reason.
-3. **Layer 3 — 14 broad searches + big-ticket follow-ups** (sports schedules,
-   major concerts/festivals) to pin exact dates, times, prices, URLs.
+1. **Layer 1 — general sources** (local press, weekend roundups, event
+   roundups, ticketing sites). Log each as ok / partial / failed with a
+   one-line note.
+2. **Layer 2 — venue sweep** (the configured venue list). Per-venue health +
+   every stale/cancelled/duplicate drop documented with its reason.
+3. **Layer 3 — broad searches + big-ticket follow-ups** (the configured
+   broad-search topics; sports schedules, major concerts/festivals) to pin
+   exact dates, times, prices, URLs.
 
 **The date-verification rule is non-negotiable:** every event's date verified
 against an explicit current listing; recurring events MUST record
@@ -97,6 +106,7 @@ precip); curating indoor picks stays your judgment call.
 ```bash
 # Full dry run (everything except the real Gmail dispatch):
 python3 ~/workspace/kiwis-corner/pipeline/run.py \
+  --config ~/workspace/kiwis-corner/config.yaml \
   --events-json runs/<run-date>/events.json \
   --header-html /tmp/header.html \
   --picks-json /tmp/picks.json \
@@ -104,8 +114,10 @@ python3 ~/workspace/kiwis-corner/pipeline/run.py \
   --weather-json /tmp/weather.json \
   --dry-run
 
-# Production (drop --dry-run). Recipient defaults to Chris only:
+# Production (drop --dry-run). Recipients and sender identity come from the
+# config file — the send goes to every configured recipient in ONE message:
 python3 ~/workspace/kiwis-corner/pipeline/run.py \
+  --config ~/workspace/kiwis-corner/config.yaml \
   --events-json runs/<run-date>/events.json \
   --header-html /tmp/header.html \
   --picks-json /tmp/picks.json \
@@ -113,8 +125,10 @@ python3 ~/workspace/kiwis-corner/pipeline/run.py \
   --weather-json /tmp/weather.json
 ```
 
-Flags: `--recipient` (default `chris.rey001@gmail.com`), `--run-date`
-(override; default today America/Denver), `--run-dir` (override run dir).
+Flags: `--config` (required; your `config.yaml`), `--recipient`,
+`--from-name`, `--from-email` (rare overrides of the config values),
+`--run-date` (override; default today in the configured timezone),
+`--run-dir` (override run dir), `--dry-run`.
 
 ## 2. How the gates behave
 
@@ -122,7 +136,7 @@ Flags: `--recipient` (default `chris.rey001@gmail.com`), `--run-date`
 |---|---|---|
 | **verify** | Runs `verify.py` (6 deterministic gates: required fields, in-weekend, weekday, freshness, operator, dedupe). Non-zero exit → **halt**. | `PIPELINE HALTED` — fix `events.json` and re-run. Never hand-edit past it. |
 | **floor** | ≥40 events or halt. | Research more; re-run. |
-| **render** | `template.py` → `runs/<run-date>/email.html`. Missing/blank price on ANY event → hard FAIL. Blank header → hard FAIL. Footer must read `Kiwi's Weekend Guide`. | Fix the data/header; re-run. |
+| **render** | `template.py` → `runs/<run-date>/email.html`. Missing/blank price on ANY event → hard FAIL. Blank header → hard FAIL. Footer must read the configured footer brand. | Fix the data/header; re-run. |
 | **pre-flight** | Placeholder scan (no TODO/XXX/FIXME/lorem/`{{tokens}}`); curl link check of every unique URL (403 allowed only for AXS/SeatGeek/CPR, which must be content-verified at research time); ≥40 floor; footer brand check. | `PIPELINE HALTED: PRE-FLIGHT FAILURES` — fix and re-run. |
 | **send** | Lazy-imports `send_hardened`; validates the contract; calls `send_newsletter(...)`. Statuses: `sent` / `already_sent` / `failed` / `dry_run`. Unknown status → halt. | See §3. A `failed` dispatch writes the run log, then the pipeline raises `PipelineHalt` (non-zero exit) — a failed send never exits 0. |
 | **log** | Writes `runs/<run-date>/run-log.md` (per-source health, counts, verify output, calendar, weather, pre-flight, dispatch result verbatim, idempotency key = `<run-date>::<recipient>`). | The log self-checks the 2026-09-17 incident rule (below) and refuses to write a lying log. |
@@ -156,14 +170,14 @@ than write an ambiguous log — phrase failure notes accordingly.
   stops before any send attempt. Escalate to the send-module owner; never
   route around it.
 
-## 4. Parallel-run recipient policy
+## 4. Sender policy
 
-**Until Chris explicitly cancels Tasklet:** K3 sends to
-**chris.rey001@gmail.com ONLY**. Kristen (`kndufour@gmail.com`) gets nothing
-from K3 meanwhile — Tasklet's send remains her official edition (this avoids
-double-sending her). `--recipient` overrides the default, but do not add
-Kristen without Chris's explicit go-ahead. From the first Thursday after he
-cancels Tasklet, K3 becomes the sole sender to both recipients.
+The send goes to **every recipient listed in the config file**, as ONE
+message. K3 is the sole sender (the old Tasklet parallel-run arrangement
+ended 2026-09-26 — it is retired; do not ask about it). A run counts as a
+success only if Gmail Sent shows one message with all configured recipients
+in To, a concrete message ID, and a matching run-log entry. `--recipient`
+overrides the config for testing only; production runs use the config.
 
 ## 5. Tests
 

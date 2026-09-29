@@ -88,7 +88,18 @@ from zoneinfo import ZoneInfo
 # ---------------------------------------------------------------------------
 # Constants
 
-DENVER = ZoneInfo("America/Denver")
+# Default send timezone. Override per-family via configure_timezone() --
+# run.py sets it from config.yaml. Kept module-level because the send gate
+# computes "today" in several helpers.
+TIMEZONE = ZoneInfo("America/Denver")
+DENVER = TIMEZONE  # legacy alias
+
+
+def configure_timezone(name):
+    """Set the send timezone (IANA name, e.g. "America/Chicago")."""
+    global TIMEZONE, DENVER
+    TIMEZONE = ZoneInfo(name)
+    DENVER = TIMEZONE
 
 STATUSES = ("sent", "already_sent", "failed", "dry_run")
 
@@ -232,7 +243,7 @@ def send_newsletter(*, html_body: str, subject: str, recipient: str,
 # Matching helpers (small, deterministic)
 
 def _today_denver() -> date:
-    return datetime.now(DENVER).date()
+    return datetime.now(TIMEZONE).date()
 
 
 def _parse_date_header(value: Any) -> Optional[date]:
@@ -247,8 +258,8 @@ def _parse_date_header(value: Any) -> Optional[date]:
         return None
     if dt.tzinfo is None:
         # No timezone info: assume the send timezone rather than UTC.
-        dt = dt.replace(tzinfo=DENVER)
-    return dt.astimezone(DENVER).date()
+        dt = dt.replace(tzinfo=TIMEZONE)
+    return dt.astimezone(TIMEZONE).date()
 
 
 def _norm_subject(value: Any) -> str:

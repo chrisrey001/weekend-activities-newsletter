@@ -5,3 +5,6 @@ runs/
 .env
 .DS_Store
 *.log
+
+# Private family config — NEVER commit. Copy config.example.yaml instead.
+config.yaml

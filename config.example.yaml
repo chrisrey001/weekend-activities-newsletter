@@ -1,0 +1,67 @@
+# =====================================================================
+# Weekend newsletter config -- copy to config.yaml and make it yours.
+# Every family-specific value in the pipeline comes from this file;
+# adapting the newsletter for a new family is a config edit, not code.
+#
+# This example is a NEUTRAL SAMPLE (a fictional Chicago family). Replace
+# every value with your own. config.yaml is git-ignored -- never commit it,
+# and never put passwords or API keys here (credentials live in your
+# agent's credential store, not in YAML).
+# =====================================================================
+
+newsletter:
+  name: "Maple Street Weekend"        # newsletter title, research brief header
+  footer_brand: "Maple Street Weekend Guide"   # email footer + subject line
+  target_events: 50                   # target verified events per edition
+
+family:
+  members: ["Jordan", "Casey", "Riley"]  # footer: "curated for Jordan, Casey & Riley"
+  kid_name: "Riley"                   # young child to flag events for (null if none)
+  kid_age_years: 2
+  kid_friendly_label: "Riley-approved"   # badge on kid-suitable events
+
+location:
+  timezone: "America/Chicago"         # IANA timezone: send dates, cron, "today"
+  metro: "Chicago"                    # "Sweep each source's {metro} weekend coverage"
+  home_area: "Logan Square"           # drive times computed from here
+
+email:
+  recipients:                         # one message to all of them
+    - "you@example.com"
+    - "partner@example.com"
+  from_name: "Maple"                  # newsletter sender display name (this
+  from_email: "you@example.com"       #   newsletter only -- your other mail
+                                      #   keeps its own identity)
+
+sources:
+  # Layer 1 -- general sources swept every week. Keep the ones with real
+  # weekend coverage for your metro; drop the rest.
+  layer1:
+    - "timeout.com/chicago (weekend roundup)"
+    - "choosechicago.com"
+    - "chicagoreader.com"
+    - "do312.com"
+    - "eventbrite.com (Chicago)"
+    - "allevents.in (Chicago)"
+    - "secretchicago.com"
+    - "axs.com (Chicago)"
+    - "ticketmaster.com (Chicago)"
+  # Layer 2 -- venue calendars swept directly. Start with 10-20 venues
+  # your family actually goes to; grow from the per-venue health logs.
+  venues:
+    - "Chicago Theatre"
+    - "House of Blues Chicago"
+    - "Thalia Hall"
+    - "Metro Chicago"
+    - "Millennium Park"
+    - "Lincoln Park Zoo"
+  # Layer 3 -- broad search topics to pin dates/times/prices/URLs.
+  layer3:
+    - "pro sports schedules (Bears, Bulls, Blackhawks, Cubs, White Sox)"
+    - "major concerts and festivals"
+    - "free events"
+    - "family events"
+    - "date-night options"
+
+# Event categories (tags subset enforced by the brief).
+categories: ["family-friendly", "date-night", "cant-miss"]

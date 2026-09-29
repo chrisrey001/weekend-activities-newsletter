@@ -11,6 +11,15 @@ import weather_hook as wh
 
 WK = ["2026-09-18", "2026-09-19", "2026-09-20"]
 
+KIWI_THEME = {
+    "newsletter_name": "Kiwi's Corner",
+    "footer_brand": "Kiwi's Weekend Guide",
+    "family_label": "Chris, Kristen & Ava",
+    "home_label": "Englewood",
+    "kid_field": "kid_friendly",
+    "kid_label": "Ava-approved",
+}
+
 
 def event(name="Test Event", date="2026-09-18", start_time="7:00 PM",
           price="$20", **kw):
@@ -18,7 +27,7 @@ def event(name="Test Event", date="2026-09-18", start_time="7:00 PM",
          "address_or_area": "Denver, CO", "start_time": start_time,
          "url": "https://example.com/event", "price": price,
          "description": "A test event.", "tags": ["family-friendly"],
-         "ava_friendly": False, "drive_time_from_englewood": "~25 min",
+         "kid_friendly": False, "drive_time_from_home": "~25 min",
          "recurring": False, "sources": []}
     e.update(kw)
     return e
@@ -56,7 +65,7 @@ class TestWeatherHook(unittest.TestCase):
 class TestTemplate(unittest.TestCase):
     def test_subject_format(self):
         self.assertEqual(
-            t.subject_for(WK),
+            t.subject_for(WK, KIWI_THEME),
             "Kiwi's Weekend Guide \u2014 Friday, September 18 "
             "\u2013 Sunday, September 20")
 
@@ -97,10 +106,36 @@ class TestTemplate(unittest.TestCase):
 
     def test_footer_branding(self):
         import html as _html
+        doc = t.render_newsletter([event()], WK, "<p>Header</p>",
+                                  theme=KIWI_THEME)
+        plain = _html.unescape(doc)
+        self.assertIn("Kiwi's Weekend Guide", plain)
+        self.assertIn("curated for Chris, Kristen & Ava", plain)
+        self.assertIn("drive times from Englewood", plain)
+        self.assertNotIn(t.LEGACY_BUG_BRAND, plain)
+
+    def test_default_theme_is_neutral(self):
+        import html as _html
         doc = t.render_newsletter([event()], WK, "<p>Header</p>")
         plain = _html.unescape(doc)
-        self.assertIn(t.FOOTER_BRAND, plain)
-        self.assertNotIn(t.LEGACY_BUG_BRAND, plain)
+        self.assertIn("Weekend Guide", plain)
+        self.assertIn("curated for the family", plain)
+        self.assertNotIn("Kiwi", plain)
+
+    def test_kid_badge_uses_theme_label(self):
+        import html as _html
+        e = event(kid_friendly=True)
+        doc = t.render_newsletter([e], WK, "<p>Header</p>", theme=KIWI_THEME)
+        self.assertIn("Ava-approved", _html.unescape(doc))
+        # no badge without a kid label in the theme
+        doc2 = t.render_newsletter([e], WK, "<p>Header</p>")
+        self.assertNotIn("approved", _html.unescape(doc2))
+
+    def test_drive_time_from_home_rendered(self):
+        import html as _html
+        doc = t.render_newsletter([event()], WK, "<p>Header</p>",
+                                  theme=KIWI_THEME)
+        self.assertIn("(~25 min)", _html.unescape(doc))
 
     def test_conflict_annotation_rendered(self):
         e = event(conflict=True,

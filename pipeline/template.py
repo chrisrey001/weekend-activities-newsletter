@@ -25,15 +25,50 @@ Conventions (settled, do not regress):
     - Multi-day events (same name on 2+ days) consolidate into "All Weekend".
     - Bespoke header_html is inserted verbatim (written fresh weekly by the
       worker; trusted content).
-    - Footer must read "Kiwi's Weekend Guide".
+    - Footer carries the theme's footer_brand.
+
+Theming: every family-specific string (newsletter name, footer brand, family
+members, home area, kid badge) comes from a theme dict -- see
+config.theme_from_config(). Pass theme= explicitly, or call set_theme()
+once; render functions fall back to the module theme.
 """
 
 import html
 import re
 from datetime import datetime
 
-FOOTER_BRAND = "Kiwi's Weekend Guide"
+FOOTER_BRAND = "Kiwi's Weekend Guide"  # legacy alias; prefer theme["footer_brand"]
 LEGACY_BUG_BRAND = "K2 Weekend Rundown"
+
+DEFAULT_THEME = {
+    "newsletter_name": "Weekend Guide",
+    "footer_brand": "Weekend Guide",
+    "family_label": "the family",
+    "home_label": "home",
+    "kid_field": "kid_friendly",
+    "kid_label": None,
+}
+
+_THEME = dict(DEFAULT_THEME)
+
+
+def set_theme(theme):
+    """Set the module theme (family branding). Merged over DEFAULT_THEME."""
+    _THEME.clear()
+    _THEME.update(DEFAULT_THEME)
+    _THEME.update(theme or {})
+
+
+def get_theme():
+    return _THEME
+
+
+def _resolve_theme(theme):
+    if theme is None:
+        return _THEME
+    merged = dict(DEFAULT_THEME)
+    merged.update(theme)
+    return merged
 
 TAG_EMOJI = {"family-friendly": "\U0001F468\u200D\U0001F469\u200D\U0001F467",
              "date-night": "\U0001F377", "cant-miss": "\u2B50"}
@@ -67,9 +102,10 @@ def day_label(datestr):
     return datetime.strptime(datestr, "%Y-%m-%d").strftime("%A, %B %-d")
 
 
-def subject_for(weekend):
+def subject_for(weekend, theme=None):
+    theme = _resolve_theme(theme)
     fri, _, sun = weekend
-    return (f"{FOOTER_BRAND} \u2014 {day_label(fri)} "
+    return (f"{theme['footer_brand']} \u2014 {day_label(fri)} "
             f"\u2013 {day_label(sun)}")
 
 
@@ -118,12 +154,18 @@ def _tags_html(e):
     return " ".join(TAG_EMOJI[t] for t in e.get("tags", []) if t in TAG_EMOJI)
 
 
-def _ava_html(e):
-    if e.get("ava_friendly"):
+def _kid_html(e, theme):
+    label = theme["kid_label"]
+    if label and e.get(theme["kid_field"]):
         return (' &nbsp;<span style="background:#e8f5e9;color:#2e7d32;'
                 'font-size:12px;padding:2px 8px;border-radius:10px;">'
-                "\U0001F476 Ava-approved</span>")
+                "\U0001F476 " + esc(label) + "</span>")
     return ""
+
+
+# _ava_html kept as a thin alias for backward compatibility.
+def _ava_html(e, theme=None):
+    return _kid_html(e, _resolve_theme(theme))
 
 
 def _conflict_html(e):
@@ -141,33 +183,39 @@ def _area_short(e):
     return area.split(",")[0] if "," in area else area
 
 
-def event_li(e, context_notes_html=""):
+def event_li(e, context_notes_html="", theme=None):
+    theme = _resolve_theme(theme)
     require_price(e)  # hard FAIL before any rendering
     tags = _tags_html(e)
     border = "#e67e22" if "cant-miss" in e.get("tags", []) else (
         TAG_COLOR.get((e.get("tags") or [""])[0], "#9b59b6"))
+    drive = esc(e.get("drive_time_from_home")
+                or e.get("drive_time_from_englewood") or "")
     return f'''  <li style="margin-bottom: 18px; padding: 12px; background: #f9f9f9; border-left: 4px solid {border}; border-radius: 4px;">
-    {tags} <strong><a href="{esc(e['url'])}" style="color: #1a1a2e; text-decoration: none;">{esc(e['name'])}</a></strong>{_ava_html(e)}<br>
-    \U0001F550 {esc(e.get('start_time') or 'See listing')} &nbsp;|&nbsp; \U0001F4CD {esc(e['venue'])}, {esc(_area_short(e))} ({esc(e.get('drive_time_from_englewood') or '')}) &nbsp;|&nbsp; \U0001F4B0 {price_html(e['price'])}{_conflict_html(e)}{context_notes_html}<br>
+    {tags} <strong><a href="{esc(e['url'])}" style="color: #1a1a2e; text-decoration: none;">{esc(e['name'])}</a></strong>{_kid_html(e, theme)}<br>
+    \U0001F550 {esc(e.get('start_time') or 'See listing')} &nbsp;|&nbsp; \U0001F4CD {esc(e['venue'])}, {esc(_area_short(e))} ({drive}) &nbsp;|&nbsp; \U0001F4B0 {price_html(e['price'])}{_conflict_html(e)}{context_notes_html}<br>
     <span style="color: #555; font-size: 13px;">{esc(e.get('description') or '')}</span>
   </li>'''
 
 
-def _all_weekend_li(name, recs, weekend):
+def _all_weekend_li(name, recs, weekend, theme=None):
+    theme = _resolve_theme(theme)
     s = recs[0]
     require_price(s)
     day_names = [datetime.strptime(r["date"], "%Y-%m-%d").strftime("%A")
                  for r in recs]
     tags = _tags_html(s)
+    drive = esc(s.get("drive_time_from_home")
+                or s.get("drive_time_from_englewood") or "")
     return f'''  <li style="margin-bottom: 18px; padding: 12px; background: #f9f9f9; border-left: 4px solid #e67e22; border-radius: 4px;">
-    {tags} <strong><a href="{esc(s['url'])}" style="color: #1a1a2e; text-decoration: none;">{esc(s['name'])}</a></strong>{_ava_html(s)}<br>
-    \U0001F550 {esc(", ".join(day_names))} &nbsp;|&nbsp; \U0001F4CD {esc(s['venue'])} ({esc(s.get('drive_time_from_englewood') or '')}) &nbsp;|&nbsp; \U0001F4B0 {price_html(s['price'])}{_conflict_html(s)}<br>
+    {tags} <strong><a href="{esc(s['url'])}" style="color: #1a1a2e; text-decoration: none;">{esc(s['name'])}</a></strong>{_kid_html(s, theme)}<br>
+    \U0001F550 {esc(", ".join(day_names))} &nbsp;|&nbsp; \U0001F4CD {esc(s['venue'])} ({drive}) &nbsp;|&nbsp; \U0001F4B0 {price_html(s['price'])}{_conflict_html(s)}<br>
     <span style="color: #555; font-size: 13px;">{esc(s.get('description') or '')}</span>
   </li>'''
 
 
 def render_newsletter(events, weekend, header_html, picks=None,
-                      day_context_notes=None, weather_note=""):
+                      day_context_notes=None, weather_note="", theme=None):
     """Render the full newsletter HTML.
 
     events: list of canonical event dicts (with optional "conflict" /
@@ -182,6 +230,7 @@ def render_newsletter(events, weekend, header_html, picks=None,
     weather_note: optional one-line weather summary rendered above the
         day sections.
     """
+    theme = _resolve_theme(theme)
     if not (header_html or "").strip():
         raise ValueError("header_html is required -- the newsletter must "
                          "carry a bespoke, written-fresh header every week")
@@ -201,7 +250,7 @@ def render_newsletter(events, weekend, header_html, picks=None,
             f'<br><span style="color:#2e7d32;font-size:12px;">'
             f"\U0001F3E1 {esc(n)}</span>"
             for n in day_context_notes.get(date, []))
-        lis = "\n".join(event_li(e, ctx if i == 0 else "")
+        lis = "\n".join(event_li(e, ctx if i == 0 else "", theme=theme)
                         for i, e in enumerate(day_events))
         day_sections += f'''
 <h2 style="background: #1a1a2e; color: white; padding: 10px 14px; border-radius: 6px;">
@@ -211,7 +260,7 @@ def render_newsletter(events, weekend, header_html, picks=None,
 {lis}
 </ul>'''
 
-    aw_lis = [_all_weekend_li(name, recs, weekend)
+    aw_lis = [_all_weekend_li(name, recs, weekend, theme=theme)
               for name, recs in sorted(multi.items())]
     all_weekend = ""
     if aw_lis:
@@ -234,7 +283,7 @@ def render_newsletter(events, weekend, header_html, picks=None,
 <body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; color: #222; padding: 0 8px;">
 
 <h1 style="color: #1a1a2e; border-bottom: 3px solid #e63946; padding-bottom: 10px;">
-  \U0001F389 {esc(subject_for(weekend))}
+  \U0001F389 {esc(subject_for(weekend, theme))}
 </h1>
 
 <p style="color: #444; font-size: 15px; line-height: 1.6; background: #fdf6ec; padding: 14px; border-radius: 6px; border-left: 4px solid #e67e22;">
@@ -256,7 +305,7 @@ def render_newsletter(events, weekend, header_html, picks=None,
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0 12px;">
 <p style="color: #999; font-size: 12px; text-align: center;">
-  {esc(FOOTER_BRAND)} \u00B7 curated for Chris, Kristen &amp; Ava \u00B7 drive times from Englewood<br>
+  {esc(theme['footer_brand'])} \u00B7 curated for {esc(theme['family_label'])} \u00B7 drive times from {esc(theme['home_label'])}<br>
   <a href="https://muse.ai/s/command-center-mockup-kxm6dxvx0p1bxya#performance" style="color: #999; text-decoration: underline;">K3 Command Center \u2014 performance metrics</a>
 </p>
 

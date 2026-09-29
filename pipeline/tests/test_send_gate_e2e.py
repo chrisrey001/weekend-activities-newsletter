@@ -69,7 +69,7 @@ def make_events_json(path):
             "recurring": False,
             "sources": [{"url": f"https://example.com/e2e-event-{i + 1:02d}",
                          "retrieved_at": "2026-09-17"}],
-            "drive_time_from_englewood": "~25 min",
+            "drive_time_from_home": "~25 min",
             "address_or_area": "Denver",
         })
     data = {"weekend": WEEKEND, "generated": "2026-09-17T10:00:00-06:00",
@@ -143,6 +143,8 @@ class E2EBase(unittest.TestCase):
         try:
             with patch.object(run, "stage_send", spy):
                 run.main(["--run-date", RUN_DATE,
+                          "--config", str(Path(__file__).parent /
+                                          "fixtures" / "test-config.yaml"),
                           "--run-dir", str(self.run_dir),
                           "--events-json", str(self.events_json),
                           "--header-html", str(self.header),

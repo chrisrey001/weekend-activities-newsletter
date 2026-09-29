@@ -24,6 +24,7 @@ from pathlib import Path
 PIPE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PIPE))
 import calendar_context as cc  # noqa: E402
+import template  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("kiwi_run_cal", PIPE / "run.py")
 run = importlib.util.module_from_spec(spec)
@@ -168,7 +169,8 @@ class TestRenderKeepsAllEvents(unittest.TestCase):
             header.write_text("<p>Test header.</p>")
             html_doc, subject = run.stage_render(
                 events, WEEKEND, Path(td), str(header), None, day_notes,
-                {"note": "", "status": "not_provided", "rain_days": []}, [])
+                {"note": "", "status": "not_provided", "rain_days": []}, [],
+                template.DEFAULT_THEME)
         return html_doc, subject
 
     def test_all_guide_events_rendered_with_no_conflict_annotations(self):

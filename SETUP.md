@@ -1,97 +1,136 @@
-# SETUP — adapt Kiwi's Corner for your own family
+# SETUP — run your own family's weekend newsletter
 
-This guide is for friends and family running Meta Muse. You'll copy this
-repo, change the config surface, and have your agent send your first edition
-within a week.
+This guide takes you from zero to your first edition in about a week. It
+works whether your agent is Meta Muse, your own personal agent, or another
+AI tool — the pipeline is just Python plus an agent that can research the
+web and send email.
 
-## Prerequisites
+## What you need
 
-- **Meta Muse** (the agent runs the whole pipeline — research included)
-- **Gmail connected** in Muse (the agent sends through your Gmail)
-- **Google Calendar** (optional but recommended — powers the scheduling notes)
-- The ability to create **scheduled jobs** (crons) in Muse
+- **An AI agent** that can run shell commands, browse the web, and send
+  email through your Gmail (or another mail provider your agent supports).
+- **A calendar** the agent can read (optional but recommended — it powers
+  the scheduling notes).
+- **A way to schedule the agent** weekly (Muse scheduled jobs, a cron on
+  your machine, etc.).
+- Python 3 and `curl`.
 
-## Step 1 — Copy and configure
-
-Clone this repo, then change the config surface. Everything family-specific
-lives in a handful of places:
-
-| What | Where | Example default |
-|---|---|---|
-| Home location (drive times) | research brief + `template.py` | Englewood, CO |
-| Recipients | `--recipient` flag | `chris.rey001@gmail.com, kndufour@gmail.com` |
-| Sender display name | `--from-name` / `--from-email` | `Kiwi` |
-| Event categories | `template.py` | family-friendly / date night / can't-miss |
-| Source list | research brief (Layer 1 + 2) | Denver publications, venues, ticketing sites |
-| Kid labels | research brief | toddler-friendly ("Ava-friendly") labels |
-| Footer | pre-flight gate | "Kiwi's Weekend Guide" |
-
-Rename the newsletter itself in the subject line template and footer.
-
-## Step 2 — Teach your agent the Thursday run
-
-Your agent's Thursday job, in order:
-
-1. `python3 pipeline/run.py --run-date YYYY-MM-DD` → prints the research
-   brief, writes `runs/<date>/research-brief.md`, stops.
-2. Research per the brief (three layers), writing structured event records.
-3. Re-run with `--events-json <file>` → verifies, renders, pre-flights,
-   sends through `send_hardened.py`.
-4. Confirm: status `sent` **with a message ID**, verified in Sent.
-
-The full operator procedure is `docs/RUNBOOK.md`. The agent should read it
-before the first production run.
-
-## Step 3 — Dry run first
+## Step 1 — Copy the repo and make your config
 
 ```bash
-python3 pipeline/run.py --run-date YYYY-MM-DD --events-json events.json --dry-run
+git clone https://github.com/chrisrey001/weekend-activities-newsletter.git
+cd weekend-activities-newsletter
+cp config.example.yaml config.yaml
 ```
 
-Dry runs exercise every gate except the actual dispatch. **Never send real
-email during testing.**
+Now edit `config.yaml`. Everything family-specific lives here — you should
+never need to touch Python:
 
-## Step 4 — Schedule the three jobs (America/Denver shown; use yours)
+| Section | What to change |
+|---|---|
+| `newsletter.name` / `newsletter.footer_brand` | Your newsletter's name and footer |
+| `newsletter.target_event_count` | How many events to aim for (40–65 works well) |
+| `family.members` / `family.child` | Names, and the child's age (drives kid-friendly labels) |
+| `location.metro` / `location.home_area` / `location.timezone` | Your city, neighborhood, and IANA timezone (e.g. `America/Chicago`) |
+| `recipients` / `sender` | Who gets the email, and the From name/address |
+| `research.general_sources` | Local press, weekend roundups, ticketing sites for your city |
+| `research.venues` | Venues you want checked every week (name + calendar URL) |
+| `research.broad_search_topics` | Standing searches: pro sports teams, big annual festivals, etc. |
+| `events.categories` | The sections of your newsletter (e.g. family-friendly / date night / can't-miss) |
 
-| Job | When | Does |
-|---|---|---|
-| Production run | Thursday ~8:00 AM | research → verify → render → send |
-| Approval watch | Thursday ~8:45 AM | confirms the send landed in Sent; alerts you if not |
-| Watchdog | Thursday ~9:30 AM | confirms the watch ran; alerts if anything is off |
+**Finding good sources for your city:** start with your city's alt-weekly,
+the local newspaper's events/weekend section, your city's "things to do this
+weekend" roundups, and the ticketing sites that list local shows
+(Eventbrite, AllEvents, AXS, Ticketmaster). Add the 10–30 venues you
+actually go to — theaters, museums, music rooms, parks departments, sports
+stadiums. Your agent can help you build this list: ask it to find your
+city's best event roundups and venue calendars.
 
-The watch jobs never send or retry — they only verify and alert.
+**Config vs. credentials:** `config.yaml` holds *settings*, never secrets.
+Gmail/Calendar access stays in your agent's credential store. `config.yaml`
+is git-ignored — never commit it. If you fork this repo, your private config
+stays on your machine.
 
-## Step 5 — The first send and approvals
+## Step 2 — Run the research brief
 
-The first production send will surface a Gmail approval card. Approve it.
-For a hands-free Thursday, grant the standing ("always allow") permission
-for this workflow's recipients afterward — ask your agent how; it's in
-Muse's Gmail connector settings.
+```bash
+python3 pipeline/run.py --config config.yaml --run-date YYYY-MM-DD
+```
 
-## What "good" looks like
+This prints the research brief for that week's Friday–Sunday and stops. (Use
+a Thursday date — the newsletter covers the weekend starting the next day.)
 
-- 40–65 verified events (a smaller strong list beats padding)
-- Every event: confirmed date for *that* weekend, confirmed price, working
-  event-specific link
-- Drive times from your home, concise descriptions, chronological within
-  each day
-- A fresh weekend summary grounded in the actual lineup, the weather, and
-  your calendar — not a template paragraph
-- One message, all recipients in To, one Gmail message ID, Sent-folder
-  confirmation
+## Step 3 — Research (your agent does this)
+
+Hand the brief to your agent. It researches in three layers — general
+sources, the venue sweep, big-ticket follow-ups — and writes structured
+event records (`events.json`). The non-negotiable rules:
+
+- Every event's date verified against an explicit **current** listing.
+- Every event has a **confirmed price** — no price, no event.
+- Event-specific URLs only; broken/403/404/stub pages rejected.
+- Recurring events need `operator_confirmed=true` + `operator_url`.
+
+Target 40–65 verified events. Aim for quality over padding.
+
+## Step 4 — Write the personal touches
+
+Your agent writes two things fresh each week:
+
+- **`header.html`** — a short personalized paragraph: the big tickets, the
+  weather-driven picks, the kid-friendly standouts, what's on the family
+  calendar.
+- **`picks.json`** — the can't-miss picks, each with an event-specific URL.
+
+## Step 5 — Dry run, then production
+
+```bash
+# Everything except the real send:
+python3 pipeline/run.py --config config.yaml \
+  --events-json events.json --header-html header.html \
+  --picks-json picks.json --calendar-json calendar.json \
+  --weather-json weather.json --dry-run
+
+# The real thing (drop --dry-run):
+python3 pipeline/run.py --config config.yaml \
+  --events-json events.json --header-html header.html \
+  --picks-json picks.json --calendar-json calendar.json \
+  --weather-json weather.json
+```
+
+The pipeline verifies → renders → pre-flights (placeholder scan, link
+check, 40-event floor, footer brand) → sends **one** message to all
+recipients. A send only counts when the mail provider returns a message ID
+and it's confirmed in Sent.
+
+## Step 6 — Schedule it
+
+Set your agent to run the full sequence every Thursday morning (8:00 AM in
+your timezone is a good default — it gives you the day to react). Add two
+follow-ups:
+
+1. **Approval watch** (~45 min later): checks Sent for today's edition with
+   all recipients; if the send is parked on an approval, tells you to tap
+   approve. Verifies only — never sends or retries.
+2. **Watchdog** (~90 min later): confirms the watch ran; alerts if the
+   morning chain went quiet.
+
+The full operator procedure your agent should follow is
+[`pipeline/RUNBOOK.md`](pipeline/RUNBOOK.md).
+
+## Migrating from an older version
+
+- Event files using `ava_friendly` still render — the template falls back
+  to it — but new research should write `kid_friendly` (driven by
+  `family.child` in config).
+- `drive_time_from_englewood` likewise falls back to the generic
+  `drive_time_from_home`.
 
 ## Troubleshooting
 
-- **Run timed out** — the research phase is the long pole. Cap research
-  time or shrink the source list; the one-hour execution window is real.
-- **"failed", no message ID** — check Gmail Sent *first*. If the message is
-  there, it sent (approval released late); if not, check the approval card.
-  Never blind-retry.
-- **Approval card every week** — the standing permission wasn't granted for
-  all recipients, or expired. Re-grant it.
-- **Stale events slipping through** — tighten Layer 3: every recurring event
-  needs `operator_confirmed=true` + `operator_url` from the operator's own
-  current listing.
-
-Run the test suite after any change: `python3 -m unittest discover -s tests`
-from `pipeline/`. 110 tests, all green is the bar.
+- **Pipeline halts on verify** → read the gate output, fix `events.json`
+  (drop bad records into `dropped` with reasons), re-run.
+- **Pre-flight link failures** → replace with the operator's own event page
+  or drop the event.
+- **`already_sent`** → the edition is already out; stop, don't re-send.
+- **Tests**: `python3 -m pytest pipeline/tests/ -q` — they never send email.

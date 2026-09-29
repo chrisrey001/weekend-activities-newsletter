@@ -1,15 +1,21 @@
-# Kiwi's Corner — a personalized weekend newsletter, researched and sent by an AI agent
+# Weekend Activities Newsletter
 
-Every Thursday morning, an agent (Meta's Muse) researches the upcoming
-Friday–Sunday, verifies 40–65 local events, and sends one personalized HTML
-email to the family: drive times from home, confirmed prices, calendar-aware
-scheduling notes, weather-aware picks, and a fresh weekend summary written for
-that exact lineup.
+A personalized weekend newsletter, researched and sent by an AI agent — and
+a reusable template for any family to run their own.
 
-This repo is the complete, working framework — pipeline code, verification
-gates, send-integrity rules, operator docs, and the full test suite. It was
-built for one family (Englewood, CO — two parents, a toddler, a dog named
-Kiwi) and is designed to be re-skinned for any family, anywhere.
+This repo has **two purposes**:
+
+1. **The production framework** for one family (the Reys — Englewood, CO,
+   newsletter name "Kiwi's Corner"). Every Thursday morning an agent
+   researches the upcoming Friday–Sunday, verifies 40–65 local events, and
+   sends one personalized HTML email to the family: drive times from home,
+   confirmed prices, calendar-aware scheduling notes, weather-aware picks,
+   and a fresh weekend summary written for that exact lineup.
+2. **A template you can copy.** The whole thing is config-driven: copy
+   `config.example.yaml` to `config.yaml`, edit your family / city / sources
+   (no Python changes), and your agent — Meta Muse, your own personal agent,
+   or another AI tool — can send your family's first edition within a week.
+   See [SETUP.md](SETUP.md).
 
 ## How it works
 
@@ -22,81 +28,56 @@ production run ──────► approval watch ──────► watchd
 
 ### The pipeline (`pipeline/run.py`)
 
-1. **Research brief** — `run.py` emits a brief for this week's Fri–Sun, then
-   stops. The agent researches in three layers:
+1. **Config** — everything family-specific lives in `config.yaml`:
+   newsletter name, recipients, sender identity, timezone, metro, home area,
+   family members (and kid age for kid-friendly labels), research sources,
+   venue list, broad-search topics, event categories. The example config is
+   a neutral sample; the private config is git-ignored and never committed.
+2. **Research brief** — `run.py --config config.yaml` emits a brief for this
+   week's Fri–Sun, then stops. The agent researches in three layers:
    - Layer 1: general sources (local press, event roundups, ticketing sites)
    - Layer 2: a venue sweep (per-venue health; stale/cancelled/dupes dropped
      with documented reasons)
    - Layer 3: broad searches + big-ticket follow-ups to pin exact dates,
      times, prices, URLs
-2. **Deterministic event records** — every event becomes a structured record.
+3. **Deterministic event records** — every event becomes a structured record.
    `verify.py` enforces the non-negotiable gates:
    - date verified against an explicit *current* listing for that exact weekend
    - a **confirmed price** — no price, no event
    - event-specific URLs only; 403/404/DNS stubs rejected
    - recurring events must carry `operator_confirmed=true` + `operator_url`
-3. **Calendar context** (`calendar_context.py`) — three tiers:
+4. **Calendar context** (`calendar_context.py`) — three tiers:
    - hard timed conflicts (blocks an event)
    - useful family/context notes
-   - informational all-day events (never invalidate a whole day)
-4. **Weather hook** (`weather_hook.py`) — indoor alternatives when the
-   forecast demands it.
-5. **Template render** (`template.py`) — chronological within each day,
-   categorized (family-friendly / date night / can't-miss), drive times from
-   home, concise descriptions, kid-friendly labels where appropriate.
-6. **Pre-flight gates** — every link resolved, every price present, footer
-   intact.
-7. **Send** (`send_hardened.py`) — see *Send integrity* below.
+   - all-day events (informational only)
+5. **Render + pre-flight** (`template.py`) — theme-driven branding: the
+   newsletter name, footer brand, family label, home area, and kid badge all
+   come from config. Pre-flight scans for placeholders, curl-checks every
+   link, enforces the 40-event floor and the footer brand.
+6. **Send** (`send_hardened.py`) — Sent-first idempotency: one message to all
+   configured recipients; a `sent` status is only ever recorded with a real
+   Gmail message ID confirmed in Sent.
 
-### Send integrity
+### Operator docs
 
-The 2026-09-17 incident rule: a run once recorded "sent" while the email was
-still parked on an unanswered approval. This module makes that impossible by
-construction:
+- [`SETUP.md`](SETUP.md) — adapt the template for your own family
+- [`pipeline/RUNBOOK.md`](pipeline/RUNBOOK.md) — the Thursday operator
+  procedure (for the agent running production)
+- [`PLAN.md`](PLAN.md) — architecture spec
+- [`ROADMAP.md`](ROADMAP.md) — where this could go next
 
-- **Sent-first idempotency** — today's Sent folder is searched *before* any
-  send. Already there → `already_sent`, no second send, ever.
-- **Message ID required** — no ID (timeout, approval pending, empty output)
-  → `failed`, never "sent".
-- **Post-send confirmation** — the returned ID must be found in Sent, dated
-  today, addressed to every intended recipient. Only then → `sent`. This is
-  the *only* code path that returns "sent".
-- **DO-NOT-RETRY** — a failure after a possible send is never retried
-  blindly; the message may already exist in Sent.
+## Tests
 
-Multi-recipient sends go as **one message**; success requires every intended
-address in the To header. A single-recipient message never counts as a
-both-recipient send.
-
-### Sender identity
-
-The newsletter sends with its own display name — `From: Kiwi <address>` —
-set per-send via `--from-name` / `--from-email`. This keeps the newsletter's
-brand separate from the operator's other email identities. Verified
-2026-09-28: the Gmail API preserves the display name in the From header for
-the authenticated user's own address.
-
-## Repo layout
-
-```
-pipeline/           the whole system: run.py, send_hardened.py, template.py,
-                    calendar_context.py, weather_hook.py, approval_watch_logic.py
-pipeline/tests/     110-test suite (run: python3 -m unittest discover -s tests)
-verify.py           deterministic event gates
-docs/               RUNBOOK.md (operator), AUDIT.md (design audit),
-                    approval_watch.md (the verifier job)
-README.md           this file
-SETUP.md            adapt it for your own family
-ROADMAP.md          where this goes next (website + paid membership)
+```bash
+python3 -m pytest pipeline/tests/ -q   # full suite
+python3 verify.py                       # the deterministic gates, standalone
 ```
 
-## History
+Tests never send live email.
 
-Built 2026-09 for the Rey family in Englewood, Colorado. Originally ran on
-Tasklet.ai; migrated to Meta Muse (agent "K3") on 2026-09-26, which is now
-the sole sender. Production record: 43 verified events, 44/44 links
-resolved, zero verification failures on the first Muse-run edition.
+## What this is not
 
-## License
-
-TBD — currently private. Shared with friends and family for personal use.
+- Not a SaaS, not a hosted service — it's a framework you run yourself.
+- No credentials in the repo: Gmail/Calendar access lives in your agent's
+  credential store; `config.yaml` holds settings, not secrets, and stays out
+  of Git.

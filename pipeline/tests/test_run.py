@@ -60,16 +60,31 @@ class TestWeekend(unittest.TestCase):
 class TestBriefMode(unittest.TestCase):
     def test_brief_emitted_and_stops(self):
         with tempfile.TemporaryDirectory() as td:
-            rc = run.main(["--run-date", "2026-09-17", "--run-dir", td])
+            rc = run.main(["--run-date", "2026-09-17", "--run-dir", td,
+                           "--config", str(Path(__file__).parent /
+                                           "fixtures" / "test-config.yaml")])
             self.assertEqual(rc, 0)
             brief = Path(td) / "research-brief.md"
             self.assertTrue(brief.exists())
             text = brief.read_text()
             for needle in ("3-layer", "date-verification", "stated_weekday",
                            "operator_confirmed", "operator_url",
-                           "recurring", "sources", "40-65", "events.json",
+                           "recurring", "sources", "floor 40", "events.json",
                            "--events-json"):
                 self.assertIn(needle, text, needle)
+
+    def test_brief_uses_real_run_weekday(self):
+        # Regression: the brief once hardcoded "(Thursday)" even when the
+        # run happened on another weekday. It must print the actual weekday.
+        for run_date, weekday in (("2026-09-17", "Thursday"),
+                                  ("2026-09-29", "Tuesday")):
+            with tempfile.TemporaryDirectory() as td:
+                rc = run.main(["--run-date", run_date, "--run-dir", td,
+                               "--config", str(Path(__file__).parent /
+                                               "fixtures" / "test-config.yaml")])
+                self.assertEqual(rc, 0)
+                text = (Path(td) / "research-brief.md").read_text()
+                self.assertIn(f"Run date: {run_date} ({weekday})", text)
 
 
 class TestVerifyGate(unittest.TestCase):
