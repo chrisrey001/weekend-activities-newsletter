@@ -60,7 +60,11 @@ EVENT_FLOOR = 40  # settled requirement: ~40-65 verified Fri-Sun events
 # because research-time content verification is recorded in each event's
 # sources / operator attestation (see research brief, date-verification
 # rule). Any other non-2xx/3xx response is a hard pre-flight FAIL.
-KNOWN_BOT_PROTECTION_DOMAINS = ("axs.com", "seatgeek.com", "cpr.org")
+KNOWN_BOT_PROTECTION_DOMAINS = ("axs.com", "seatgeek.com", "cpr.org",
+                                  # muse.ai share links 403 plain curl but are
+                                  # live (verified 2026-10-01 via artifact
+                                  # share state + content fetch)
+                                  "muse.ai")
 
 CURL_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
            "AppleWebKit/537.36 (KHTML, like Gecko) "

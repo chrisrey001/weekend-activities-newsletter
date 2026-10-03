@@ -249,10 +249,16 @@ class TestDarkBrandTokens(unittest.TestCase):
         # rounded fallback for Apple platforms (very close to Fredoka)
         self.assertIn("Arial Rounded MT Bold", self.doc)
 
-    def test_event_card_two_column_layout(self):
-        # matches the design's .event grid: 150px .when column + content
-        self.assertIn('width="150"', self.doc)
+    def test_event_card_single_column_layout(self):
+        # matches the design's .event grid (1fr): one full-width cell --
+        # event name header, then time/location/tags meta, then details.
+        # No side column: the old 150px .when cell wasted a third of the
+        # card on mobile.
+        self.assertNotIn('width="150"', self.doc)
         self.assertIn('role="presentation"', self.doc)
+        # the time now lives in the meta line under the header, not in a
+        # separate column
+        self.assertLess(self.doc.index("<h3"), self.doc.index("7:00 PM"))
 
     def test_sun_highlight_used(self):
         # the design's signature yellow marker (--sun) behind a key word

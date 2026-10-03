@@ -24,6 +24,14 @@ no message ID. This module makes that impossible by construction:
     week's guide is already in Sent, the call returns "already_sent" and
     never attempts another send.
   * Step 2 -- dry_run short-circuits before any send attempt.
+  * Step 2b -- in-flight claim (2026-10-01): an atomic claim file is taken
+    before the send and released when the attempt resolves. A concurrent
+    path finding a fresh claim returns "failed" WITHOUT touching the Gmail
+    adapter -- the Step-1 mailbox check cannot see a send that is parked on
+    an unanswered approval, and without this guard two paths each raise
+    their own approval card for the same email (exactly what happened on
+    2026-10-01). Stale claims (>30 min, e.g. a crashed holder) are
+    re-verified against Sent and taken over, never trusted blindly.
   * Step 3 -- the Gmail send must return a real message ID. No ID (None,
     empty, or unparseable output) => "failed".
   * Step 4 -- post-send confirmation: Sent is re-searched and the returned
@@ -77,8 +85,10 @@ ASSUMPTIONS (documented, per contract):
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -113,6 +123,25 @@ GET_TIMEOUT_S = 45
 
 _CLI = "hatch_gws_cli"
 
+# In-flight send claim (2026-10-01 incident): the Step-1 mailbox check only
+# sees *completed* sends. A send parked on an unanswered connector approval
+# is invisible to it, so two concurrent execution paths (the cron worker and
+# a descendant subagent on 2026-10-01) each passed Step 1 and each raised
+# their own approval card for the same email. The claim file covers that
+# in-flight window: it is created atomically (O_CREAT|O_EXCL) between the
+# dry-run short-circuit and the send, held only for the duration of the send
+# attempt, and released when the attempt resolves (sent or failed). A second
+# path that finds a fresh claim returns "failed" WITHOUT invoking the Gmail
+# adapter -- no second approval card, ever. Override the directory in tests
+# (or per deployment) via the KIWIS_SEND_CLAIM_DIR environment variable.
+CLAIM_DIR = os.environ.get(
+    "KIWIS_SEND_CLAIM_DIR",
+    os.path.join(os.path.expanduser("~"), ".kiwis-corner-send-claims"),
+)
+# A crashed holder must not block a later run forever: claims older than
+# this are treated as stale, re-verified against Sent, and taken over.
+CLAIM_TTL_S = 30 * 60
+
 
 # ---------------------------------------------------------------------------
 # Public contract
@@ -143,9 +172,10 @@ def send_newsletter(*, html_body: str, subject: str, recipient: str,
     alias keeps its own display name for other workflows.)
 
     Steps: (1) idempotency check against today's Sent; (2) dry-run short-
-    circuit; (3) send, requiring a message ID; (4) post-send confirmation
-    that the ID is in Sent, dated today, addressed to recipient. Only step 4
-    success returns status "sent".
+    circuit; (2b) in-flight claim so concurrent paths can't each raise an
+    approval card; (3) send, requiring a message ID; (4) post-send
+    confirmation that the ID is in Sent, dated today, addressed to
+    recipient. Only step 4 success returns status "sent".
     """
     adapter = gmail if gmail is not None else CliGmailAdapter()
     today = _today_denver()
@@ -183,6 +213,35 @@ def send_newsletter(*, html_body: str, subject: str, recipient: str,
             "dry_run", None,
             f"dry run: no send attempted (run_id={run_id})")
 
+    # -- Step 2b: in-flight claim -----------------------------------------
+    # The Step-1 mailbox check cannot see a send parked on an unanswered
+    # connector approval, so without this guard two concurrent paths each
+    # raise their own approval card for the same email (2026-10-01: the cron
+    # worker and a descendant subagent). A blocked path returns here WITHOUT
+    # touching the Gmail adapter -- no second approval card, ever.
+    blocked = _acquire_claim(adapter, subject=subject, recipient=recipient,
+                             date_str=date_str, run_id=run_id)
+    if blocked is not None:
+        return blocked
+    try:
+        return _attempt_send(adapter, html_body=html_body, subject=subject,
+                             recipient=recipient, sender=sender,
+                             date_str=date_str, run_id=run_id)
+    finally:
+        _release_claim(subject=subject, recipient=recipient,
+                       date_str=date_str, run_id=run_id)
+
+
+def _attempt_send(adapter, *, html_body: str, subject: str, recipient: str,
+                  sender: Optional[str], date_str: str,
+                  run_id: str) -> SendResult:
+    """Steps 3-4: send requiring a message ID, then post-send confirmation.
+
+    Only called while holding the in-flight claim; the caller releases the
+    claim when this returns or raises. "sent" is returned from exactly ONE
+    code path below (the Step-4 success).
+    """
+    today = _today_denver()
     # -- Step 3: send, requiring a message ID ----------------------------
     try:
         message_id = adapter.send(to=recipient, subject=subject,
@@ -314,6 +373,153 @@ def _is_verified_send(candidate: dict, *, message_id: str, recipient: str,
     if not _to_matches(candidate.get("to"), recipient):
         return False
     return _parse_date_header(candidate.get("date")) == today
+
+
+# ---------------------------------------------------------------------------
+# In-flight claim (Step 2b)
+
+def _claim_key(subject: str, recipient: str, date_str: str) -> str:
+    """Filesystem-safe claim filename for one send identity."""
+    slug = re.sub(r"[^a-z0-9]+", "_",
+                  f"{date_str}_{subject}_{recipient}".lower())
+    return f"send_{slug.strip('_')[:120]}.json"
+
+
+def _claim_path(subject: str, recipient: str, date_str: str) -> str:
+    return os.path.join(CLAIM_DIR, _claim_key(subject, recipient, date_str))
+
+
+def _read_claim(path: str) -> Optional[dict]:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and data.get("run_id"):
+            return data
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _claim_is_fresh(data: dict) -> bool:
+    try:
+        age = time.time() - float(data.get("claimed_at", 0))
+    except (TypeError, ValueError):
+        return False
+    return 0 <= age < CLAIM_TTL_S
+
+
+def _acquire_claim(adapter, *, subject: str, recipient: str, date_str: str,
+                   run_id: str) -> Optional[SendResult]:
+    """Take the in-flight claim for this send. None = acquired, proceed.
+
+    Any non-None SendResult must be returned immediately WITHOUT touching
+    the Gmail adapter -- that is the whole point: a second concurrent path
+    must never raise its own approval card for a send another path is
+    already attempting (2026-10-01 incident).
+    """
+    path = _claim_path(subject, recipient, date_str)
+    try:
+        os.makedirs(CLAIM_DIR, exist_ok=True)
+    except OSError:
+        pass  # best effort; the atomic create below is the real gate
+
+    fd = None
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        # Claim dir unusable: fail closed rather than risk a duplicate card.
+        return SendResult(
+            "failed", None,
+            f"send not attempted: could not create in-flight claim ({exc}); "
+            f"refusing to raise an approval card blind (run_id={run_id})")
+    if fd is not None:
+        try:
+            os.write(fd, json.dumps({
+                "run_id": run_id,
+                "claimed_at": time.time(),
+                "subject": subject,
+                "recipient": recipient,
+                "date": date_str,
+            }).encode("utf-8"))
+        finally:
+            os.close(fd)
+        return None
+
+    existing = _read_claim(path)
+    if existing is not None and _claim_is_fresh(existing):
+        return SendResult(
+            "failed", None,
+            "send not attempted: an identical send is already in flight "
+            f"(claimed by run_id={existing['run_id']}); no duplicate "
+            f"approval card was raised (run_id={run_id}). If that attempt "
+            "failed, its claim expires "
+            f"{int(CLAIM_TTL_S / 60)} min after it was taken.")
+
+    # Stale or unreadable claim: the holder crashed or never finished.
+    # Re-verify Sent before taking over -- the first attempt may have
+    # landed after all.
+    try:
+        candidates = adapter.search_sent(subject=subject, recipient=recipient,
+                                         date_str=date_str)
+    except Exception as exc:
+        return SendResult(
+            "failed", None,
+            "send not attempted: stale in-flight claim present and Sent "
+            f"re-verification failed ({exc}) -- duplicate risk unknown; "
+            f"manual review required (run_id={run_id})")
+    today = _today_denver()
+    for cand in candidates or []:
+        if _is_same_send(cand, subject=subject, recipient=recipient,
+                         today=today):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            return SendResult(
+                "already_sent", cand.get("id"),
+                "send not attempted: stale claim found but today's guide is "
+                "already in delivered mail "
+                f"(message id {cand.get('id')}); treating as already sent "
+                f"(run_id={run_id})")
+    # Still clear: take over the stale claim and proceed. Done iteratively
+    # (not recursively) so a failed unlink can't loop forever.
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except OSError as exc:
+        return SendResult(
+            "failed", None,
+            f"send not attempted: could not take over stale in-flight "
+            f"claim ({exc}); refusing to raise an approval card blind "
+            f"(run_id={run_id})")
+    try:
+        os.write(fd, json.dumps({
+            "run_id": run_id,
+            "claimed_at": time.time(),
+            "subject": subject,
+            "recipient": recipient,
+            "date": date_str,
+        }).encode("utf-8"))
+    finally:
+        os.close(fd)
+    return None
+
+
+def _release_claim(*, subject: str, recipient: str, date_str: str,
+                   run_id: str) -> None:
+    """Release our in-flight claim. Only removes the file when it is ours."""
+    path = _claim_path(subject, recipient, date_str)
+    existing = _read_claim(path)
+    if existing is not None and existing.get("run_id") == run_id:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------

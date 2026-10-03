@@ -256,28 +256,22 @@ def _area_short(e):
 def event_card(e, context_notes_html="", theme=None):
     """One event card, matching the design's .event (sample edition).
 
-    Two-column table: the .when cell (150px, like the design's
-    grid-template-columns: 150px 1fr) holds the time; the content cell
-    holds the title, tag/venue/price meta line, and description.
+    Single column, full width (the design's grid is `1fr` -- no side
+    column): the event name is the header, with the time, location, and
+    tags in the meta line just below it, followed by the description.
     """
     theme = _resolve_theme(theme)
     require_price(e)  # hard FAIL before any rendering
     tags = _tags_html(e)
     drive = esc(e.get("drive_time_from_home")
                 or e.get("drive_time_from_englewood") or "")
+    when = esc(e.get("start_time") or "See listing")
     return (
         f'<table role="presentation" width="100%" cellpadding="0" '
         f'cellspacing="0" style="padding: 16px; border-radius: 16px; '
         f'border: 2px solid {PALETTE["line"]}; '
         f'background: {PALETTE["bg"]}; margin-bottom: 12px;">'
-        f"<tr>"
-        f'<td width="150" valign="top" '
-        f'style="width: 150px; vertical-align: top; padding-right: 12px;">'
-        f'<p style="margin: 0; color: {PALETTE["muted"]}; '
-        f'font-weight: 800; font-size: 14px; font-family: {FONT_BODY};">'
-        f'{esc(e.get("start_time") or "See listing")}</p>'
-        f"</td>"
-        f'<td valign="top" style="vertical-align: top;">'
+        f"<tr><td>"
         f'<h3 style="margin: 0 0 8px; font-family: {FONT_HEADING}; '
         f'font-size: 20px; font-weight: 600; color: {PALETTE["ink"]};">'
         f'<a href="{esc(e["url"])}" style="color: {PALETTE["ink"]}; '
@@ -286,7 +280,7 @@ def event_card(e, context_notes_html="", theme=None):
         f'<p style="margin: 0; font-size: 14px; font-weight: 700; '
         f'color: {PALETTE["muted"]}; font-family: {FONT_BODY};">'
         f"{tags} "
-        f'\U0001F4CD {esc(e["venue"])}, {esc(_area_short(e))} ({drive}) '
+        f"{when} &nbsp;\U0001F4CD {esc(e['venue'])}, {esc(_area_short(e))} ({drive}) "
         f"&nbsp;\U0001F4B0 {price_html(e['price'])}</p>"
         f"{_conflict_html(e)}{context_notes_html}"
         f'<p style="margin: 8px 0 0; color: {PALETTE["muted"]}; '
@@ -305,19 +299,13 @@ def _all_weekend_card(name, recs, theme=None):
     tags = _tags_html(s)
     drive = esc(s.get("drive_time_from_home")
                 or s.get("drive_time_from_englewood") or "")
+    when = esc(", ".join(day_names))
     return (
         f'<table role="presentation" width="100%" cellpadding="0" '
         f'cellspacing="0" style="padding: 16px; border-radius: 16px; '
         f'border: 2px solid {PALETTE["line"]}; '
         f'background: {PALETTE["bg"]}; margin-bottom: 12px;">'
-        f"<tr>"
-        f'<td width="150" valign="top" '
-        f'style="width: 150px; vertical-align: top; padding-right: 12px;">'
-        f'<p style="margin: 0; color: {PALETTE["muted"]}; '
-        f'font-weight: 800; font-size: 14px; font-family: {FONT_BODY};">'
-        f'{esc(", ".join(day_names))}</p>'
-        f"</td>"
-        f'<td valign="top" style="vertical-align: top;">'
+        f"<tr><td>"
         f'<h3 style="margin: 0 0 8px; font-family: {FONT_HEADING}; '
         f'font-size: 20px; font-weight: 600; color: {PALETTE["ink"]};">'
         f'<a href="{esc(s["url"])}" style="color: {PALETTE["ink"]}; '
@@ -326,7 +314,7 @@ def _all_weekend_card(name, recs, theme=None):
         f'<p style="margin: 0; font-size: 14px; font-weight: 700; '
         f'color: {PALETTE["muted"]}; font-family: {FONT_BODY};">'
         f"{tags} "
-        f'\U0001F4CD {esc(s["venue"])} ({drive}) '
+        f"{when} &nbsp;\U0001F4CD {esc(s['venue'])} ({drive}) "
         f"&nbsp;\U0001F4B0 {price_html(s['price'])}</p>"
         f"{_conflict_html(s)}"
         f'<p style="margin: 8px 0 0; color: {PALETTE["muted"]}; '
@@ -439,7 +427,6 @@ def render_newsletter(events, weekend, header_html, picks=None,
 <html>
 <head><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="{FONTS_URL}" rel="stylesheet">
 <style>
 @import url('{FONTS_URL}');

@@ -5,9 +5,13 @@ Run: python3 -m unittest discover -s ~/workspace/kiwis-corner/pipeline/tests -p 
 (also runnable from the pipeline dir: python3 -m unittest tests.test_send_hardened -v)
 """
 
+import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
 import unittest
 from datetime import datetime
 from email.utils import format_datetime
@@ -16,15 +20,20 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import send_hardened  # noqa: E402
 from send_hardened import (  # noqa: E402
     CliGmailAdapter,
     GmailAdapterError,
     SendResult,
+    _acquire_claim,
+    _claim_path,
     _is_error_output,
     _is_same_send,
     _is_verified_send,
     _parse_date_header,
     _parse_send_output,
+    _read_claim,
+    _release_claim,
     _sent_query,
     _today_denver,
     _to_matches,
@@ -243,6 +252,111 @@ class TestSendAndVerify(unittest.TestCase):
         res = send_newsletter(html_body=HTML, subject=SUBJECT,
                               recipient=RECIPIENT, run_id=RUN_ID, gmail=g)
         self.assertEqual(res.status, "already_sent")
+
+
+class TestInFlightClaim(unittest.TestCase):
+    """Regression guard for the 2026-10-01 incident: two concurrent paths
+    (cron worker + descendant subagent) each raised their own connector
+    approval card for the same email, because the Step-1 mailbox check
+    cannot see a send parked on an unanswered approval."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="kiwis-claim-test-")
+        self._old_dir = send_hardened.CLAIM_DIR
+        send_hardened.CLAIM_DIR = self.tmp
+        self.date_str = _today_denver().isoformat()
+
+    def tearDown(self):
+        send_hardened.CLAIM_DIR = self._old_dir
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write_claim(self, run_id, claimed_at):
+        path = _claim_path(SUBJECT, RECIPIENT, self.date_str)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"run_id": run_id, "claimed_at": claimed_at,
+                       "subject": SUBJECT, "recipient": RECIPIENT,
+                       "date": self.date_str}, fh)
+        return path
+
+    def test_second_concurrent_attempt_blocked_without_adapter_touch(self):
+        # First path holds a fresh claim (simulates a send parked on its
+        # approval card). The second path must NOT touch the Gmail adapter.
+        g_first = MockGmail()
+        self.assertIsNone(_acquire_claim(
+            g_first, subject=SUBJECT, recipient=RECIPIENT,
+            date_str=self.date_str, run_id="first-run"))
+        g_second = MockGmail()
+        res = send_newsletter(html_body=HTML, subject=SUBJECT,
+                              recipient=RECIPIENT, run_id="second-run",
+                              gmail=g_second)
+        self.assertEqual(res.status, "failed")
+        self.assertIsNone(res.message_id)
+        self.assertIn("already in flight", res.notes)
+        self.assertIn("no duplicate approval card", res.notes)
+        self.assertEqual(g_second.send_calls, 0,
+                         "blocked path must never invoke the adapter's send")
+        self.assertEqual(g_second.search_calls, 1,
+                         "only the Step-1 Sent idempotency check may run")
+        _release_claim(subject=SUBJECT, recipient=RECIPIENT,
+                       date_str=self.date_str, run_id="first-run")
+
+    def test_claim_released_after_successful_send(self):
+        g = MockGmail(send_id="msg_live9")
+        calls = {"n": 0}
+
+        def scripted(subject, recipient, date_str):
+            calls["n"] += 1
+            return [] if calls["n"] == 1 else [candidate(cid="msg_live9")]
+        g.search_sent = scripted
+        res = send_newsletter(html_body=HTML, subject=SUBJECT,
+                              recipient=RECIPIENT, run_id=RUN_ID, gmail=g)
+        self.assertEqual(res.status, "sent")
+        self.assertIsNone(_read_claim(_claim_path(SUBJECT, RECIPIENT,
+                                                 self.date_str)),
+                          "claim must be released after the attempt resolves")
+
+    def test_claim_released_after_failed_send(self):
+        g = MockGmail(send_exc=GmailAdapterError("approval_expired"))
+        res = send_newsletter(html_body=HTML, subject=SUBJECT,
+                              recipient=RECIPIENT, run_id=RUN_ID, gmail=g)
+        self.assertEqual(res.status, "failed")
+        self.assertIsNone(_read_claim(_claim_path(SUBJECT, RECIPIENT,
+                                                 self.date_str)),
+                          "claim must be released after failure too, so a "
+                          "later legitimate run is not blocked")
+
+    def test_stale_claim_is_taken_over(self):
+        # Crashed holder: claim older than the TTL. Nothing in Sent, so the
+        # new path takes over and sends exactly once.
+        self._write_claim("crashed-run", time.time() - 3600)
+        g = MockGmail(send_id="msg_takeover1")
+        res = send_newsletter(html_body=HTML, subject=SUBJECT,
+                              recipient=RECIPIENT, run_id=RUN_ID, gmail=g)
+        self.assertEqual(g.send_calls, 1,
+                         "stale claim must not block a legitimate send")
+        self.assertEqual(res.status, "failed")  # post-send unverified (mock)
+        self.assertIsNone(_read_claim(_claim_path(SUBJECT, RECIPIENT,
+                                                 self.date_str)))
+
+    def test_stale_claim_with_mail_in_sent_reports_already_sent(self):
+        # Crashed holder, but the first attempt actually landed: report
+        # already_sent, never send again.
+        self._write_claim("crashed-run", time.time() - 3600)
+        g = MockGmail(search_results=[candidate()], send_id="msg_new9")
+        res = send_newsletter(html_body=HTML, subject=SUBJECT,
+                              recipient=RECIPIENT, run_id=RUN_ID, gmail=g)
+        # Step 1 already catches this before the claim, but the stale-claim
+        # re-verification path must agree.
+        self.assertEqual(res.status, "already_sent")
+        self.assertEqual(g.send_calls, 0)
+
+    def test_release_only_removes_own_claim(self):
+        self._write_claim("other-run", time.time())
+        _release_claim(subject=SUBJECT, recipient=RECIPIENT,
+                       date_str=self.date_str, run_id="not-the-owner")
+        self.assertIsNotNone(_read_claim(_claim_path(SUBJECT, RECIPIENT,
+                                                     self.date_str)),
+                             "must not delete another path's fresh claim")
 
 
 class TestSentIsImpossibleWithoutEvidence(unittest.TestCase):
