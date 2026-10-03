@@ -64,7 +64,11 @@ KNOWN_BOT_PROTECTION_DOMAINS = ("axs.com", "seatgeek.com", "cpr.org",
                                   # muse.ai share links 403 plain curl but are
                                   # live (verified 2026-10-01 via artifact
                                   # share state + content fetch)
-                                  "muse.ai")
+                                  "muse.ai",
+                                  # hellotickets.com 403s curl but serves
+                                  # browsers (verified 2026-10-02: Avs vs
+                                  # Blues 10/3 page live with ticket prices)
+                                  "hellotickets.com")
 
 CURL_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
            "AppleWebKit/537.36 (KHTML, like Gecko) "
