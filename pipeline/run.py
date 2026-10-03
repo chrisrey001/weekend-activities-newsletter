@@ -424,6 +424,16 @@ def stage_preflight(events, weekend, html_doc, out_lines, theme):
         extra = f"; {len(bot403)} x 403 bot-protection accepted" if bot403 else ""
         out_lines.append(f"preflight links: {len(urls)} checked, "
                          f"all ok{extra}")
+
+    # 5) mobile layout: event cards must be single-column, full width.
+    # A fixed-width column (e.g. the old 150px time cell) squeezes card
+    # content on phones; halt before sending rather than shipping it.
+    mobile_bad = _t.check_mobile_layout(html_doc)
+    if mobile_bad:
+        failures.append("mobile layout FAIL: " + "; ".join(mobile_bad))
+    else:
+        out_lines.append("preflight mobile layout: cards full-width, "
+                         "no fixed columns")
     if failures:
         raise PipelineHalt("PRE-FLIGHT FAILURES:\n- " + "\n- ".join(failures))
     return {"urls_checked": len(urls), "bot403_accepted": len(bot403)}

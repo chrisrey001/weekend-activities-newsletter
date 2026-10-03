@@ -341,6 +341,29 @@ def _footer_html(theme):
             f'K3 Command Center \u2014 performance metrics</a></p>')
 
 
+def check_mobile_layout(html_doc):
+    """Fail loudly if any card constrains the mobile width.
+
+    Event cards must be single-column, full-width tables: no <td> may
+    carry a fixed pixel width (the old 150px time column squeezed card
+    content into two-thirds of the phone screen), and every layout
+    table must declare width="100%". Returns a list of violation
+    strings; an empty list means the layout is mobile-clean.
+    """
+    violations = []
+    for m in re.finditer(r'<td\b[^>]*\bwidth\s*=\s*"(\d+)"', html_doc, re.I):
+        violations.append(
+            f'<td width="{m.group(1)}">: fixed pixel column widths break '
+            "event cards on mobile -- cards must be single-column, full width")
+    for m in re.finditer(r'<table\b[^>]*>', html_doc, re.I):
+        tag = m.group(0)
+        if 'role="presentation"' in tag and 'width="100%"' not in tag:
+            violations.append(
+                "<table> without width=\"100%\": layout tables must span "
+                "the full email width on mobile")
+    return violations
+
+
 def render_newsletter(events, weekend, header_html, picks=None,
                       day_context_notes=None, weather_note="", theme=None):
     """Render the full newsletter HTML.

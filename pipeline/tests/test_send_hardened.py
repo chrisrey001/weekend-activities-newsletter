@@ -412,9 +412,9 @@ class TestMatchingHelpers(unittest.TestCase):
         self.assertIsNone(_parse_date_header(None))
 
     def test_to_matches(self):
-        self.assertTrue(_to_matches("you@example.com", RECIPIENT))
-        self.assertTrue(_to_matches("YOU@EXAMPLE.COM", RECIPIENT))
-        self.assertTrue(_to_matches("Jordan <you@example.com>, x@y.z",
+        self.assertTrue(_to_matches(RECIPIENT, RECIPIENT))
+        self.assertTrue(_to_matches(RECIPIENT.upper(), RECIPIENT))
+        self.assertTrue(_to_matches(f"Chris Rey <{RECIPIENT}>, x@y.z",
                                     RECIPIENT))
         self.assertFalse(_to_matches("partner@example.com", RECIPIENT))
         self.assertFalse(_to_matches("", RECIPIENT))

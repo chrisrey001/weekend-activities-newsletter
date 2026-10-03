@@ -260,6 +260,52 @@ class TestDarkBrandTokens(unittest.TestCase):
         # separate column
         self.assertLess(self.doc.index("<h3"), self.doc.index("7:00 PM"))
 
+    def test_mobile_layout_guard_passes_on_current_cards(self):
+        self.assertEqual(t.check_mobile_layout(self.doc), [])
+
+
+class TestMobileLayoutGuard(unittest.TestCase):
+    """check_mobile_layout: the deterministic gate that keeps event cards
+    single-column and full-width on phones. Wired into preflight, so a
+    regression halts the pipeline before anything sends."""
+
+    def test_fixed_pixel_td_is_a_violation(self):
+        bad = ('<table role="presentation" width="100%"><tr>'
+               '<td width="150" style="width: 150px;">4:30 PM</td>'
+               '<td>Boo at the Zoo</td></tr></table>')
+        violations = t.check_mobile_layout(bad)
+        self.assertTrue(any('width="150"' in v for v in violations), violations)
+
+    def test_table_missing_full_width_is_a_violation(self):
+        bad = ('<table role="presentation"><tr><td>Boo at the Zoo</td>'
+               '</tr></table>')
+        violations = t.check_mobile_layout(bad)
+        self.assertTrue(any('width="100%"' in v for v in violations),
+                        violations)
+
+    def test_single_column_full_width_card_is_clean(self):
+        good = ('<table role="presentation" width="100%"><tr><td>'
+                '<h3>Boo at the Zoo</h3>'
+                '<p>4:30 PM &nbsp;Denver Zoo (~20 min)</p>'
+                '</td></tr></table>')
+        self.assertEqual(t.check_mobile_layout(good), [])
+
+    def test_non_presentation_tables_ignored(self):
+        # only layout tables are gated; data tables elsewhere are fine
+        self.assertEqual(t.check_mobile_layout("<table><tr><td>x</td></tr>"
+                                               "</table>"), [])
+
+
+class TestDarkBrandTokensContinued(unittest.TestCase):
+    """Remainder of the dark-brand token tests (use the same fixture as
+    TestDarkBrandTokens)."""
+
+    def setUp(self):
+        self.doc = t.render_newsletter(
+            [event(tags=["family-friendly", "cant-miss"], kid_friendly=True)],
+            WK, "<p>Header</p>", theme=KIWI_THEME,
+            weather_note="Sunny weekend, highs in the mid-60s")
+
     def test_sun_highlight_used(self):
         # the design's signature yellow marker (--sun) behind a key word
         self.assertIn("#FFC94A", self.doc)
