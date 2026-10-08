@@ -1,5 +1,16 @@
 # ROADMAP — from one family's newsletter to a product
 
+## Near-term next steps (noted 2026-10-08)
+
+- [ ] **Netlify notification toggle** — turn on form-submission email
+  notifications in the Netlify dashboard (Forms → Notifications) so each
+  signup emails the site owner. Without it, signups pile up silently in
+  the Netlify dashboard: the 2026-10-07 test signup never produced a
+  notification email.
+- [ ] **Welcome email for new subscribers** — set up a free transactional
+  email service so every new signup gets a welcome email. Today
+  subscribers get nothing after submitting the form.
+
 ## Where this stands
 
 Kiwi's Weekend Guide is a proven, single-family system: one agent, one Gmail
